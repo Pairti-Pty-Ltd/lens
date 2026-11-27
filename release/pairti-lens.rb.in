@@ -1,0 +1,14 @@
+cask "pairti-lens" do
+  arch arm: "arm64", intel: "x86_64"
+
+  version "@VERSION@"
+  sha256 arm:   "@ARM_SHA@",
+         intel: "@INTEL_SHA@"
+
+  url "https://github.com/Pairti-Pty-Ltd/lens/releases/download/v#{version}/Lens-v#{version}-#{arch}.zip"
+  name "Pairti Lens"
+  desc "Markdown project editor with PDF and Word publishing"
+  homepage "https://github.com/Pairti-Pty-Ltd/lens"
+
+  app "Lens.app"
+end

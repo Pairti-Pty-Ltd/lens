@@ -1,0 +1,112 @@
+name: Release Lens for macOS
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    strategy:
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Package native app
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          test "$(uname -m)" = "$ARCH"
+          mkdir -p "$RUNNER_TEMP/package"
+          make app VERSION="${GITHUB_REF_NAME#v}" DEST="$RUNNER_TEMP/package/Lens.app"
+      - name: Sign, notarize, and staple
+        env:
+          ARCH: ${{ matrix.arch }}
+          CERT_P12_BASE64: ${{ secrets.MACOS_CERT_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: bash release/sign-macos.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Lens-${{ matrix.arch }}
+          path: dist/*.zip
+          if-no-files-found: error
+
+  publish:
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: Lens-*
+          path: dist
+          merge-multiple: true
+      - name: Publish both signed archives together
+        working-directory: dist
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="$GITHUB_REF_NAME"
+          assets=("Lens-$tag-arm64.zip" "Lens-$tag-x86_64.zip")
+          sha256sum "${assets[@]}" > SHA256SUMS
+          if ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$tag" --repo "$GITHUB_REPOSITORY" --verify-tag --draft --title "Lens ${tag#v}" --generate-notes
+          fi
+          if [[ "$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" == true ]]; then
+            gh release upload "$tag" "${assets[@]}" SHA256SUMS --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false
+          fi
+
+  update-cask:
+    needs: publish
+    runs-on: ubuntu-latest
+    concurrency: lens-homebrew-tap
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Pairti-Pty-Ltd/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+      - name: Verify published downloads and update cask
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="$GITHUB_REF_NAME"
+          mkdir published
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir published
+          cd published
+          sha256sum -c SHA256SUMS
+          arm=$(sha256sum "Lens-$tag-arm64.zip" | cut -d' ' -f1)
+          intel=$(sha256sum "Lens-$tag-x86_64.zip" | cut -d' ' -f1)
+          cd ../tap
+          mkdir -p Casks
+          cask=Casks/pairti-lens.rb
+          if [[ -f "$cask" ]]; then
+            ruby -e 'current = File.read(ARGV[0])[/^  version "([^"]+)"/,1]; abort "Refusing cask downgrade" if Gem::Version.new(current) > Gem::Version.new(ARGV[1])' "$cask" "${tag#v}"
+          fi
+          sed -e "s/@VERSION@/${tag#v}/g" -e "s/@ARM_SHA@/$arm/g" -e "s/@INTEL_SHA@/$intel/g" ../release/pairti-lens.rb.in > "$cask"
+          ruby -c "$cask"
+          git add -- "$cask"
+          if ! git diff --cached --quiet; then
+            git -c user.name=github-actions -c user.email=41898282+github-actions[bot]@users.noreply.github.com commit -m "Lens ${tag#v}"
+            git push
+          fi

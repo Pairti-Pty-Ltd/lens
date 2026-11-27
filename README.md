@@ -33,7 +33,7 @@ See the [editor keymap](doc/editor-keymap.md) for keyboard shortcuts.
 
 macOS is the documented platform. A build from source needs Go 1.27.4 or later and Make.
 
-Lens downloads its own pinned copies of Typst, Pandoc and Poppler (`pdftoppm`) on first use. Each file is checksum-checked against its published release. A copy on your `PATH` is used only if that download fails. You do not need to install those tools by hand.
+The macOS app bundles all three tools below. Packaging verifies the downloaded archives. Installed apps can export and preview offline, including after you move Lens.app. Standalone development builds can download Typst and Pandoc and require a locally available pdftoppm for preview.
 
 | Tool | Used for |
 | --- | --- |
@@ -43,13 +43,14 @@ Lens downloads its own pinned copies of Typst, Pandoc and Poppler (`pdftoppm`) o
 
 ## Install
 
-On macOS, with Homebrew:
+The current install method is `make app`, described below. Once the first signed release and Homebrew cask are published, use:
 
 ```sh
-brew install pairti-pty-ltd/tap/lens
+brew install --cask pairti-pty-ltd/tap/pairti-lens
+brew upgrade --cask pairti-pty-ltd/tap/pairti-lens
 ```
 
-You can then launch Lens from Spotlight.
+If Homebrew prompts for tap trust, use `brew trust --cask pairti-pty-ltd/tap/pairti-lens` and retry the install.
 
 ## Build and run on macOS
 
