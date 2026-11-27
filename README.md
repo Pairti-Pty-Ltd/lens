@@ -31,15 +31,25 @@ See the [editor keymap](doc/editor-keymap.md) for keyboard shortcuts.
 
 ## Requirements
 
-macOS is the documented platform. A build needs Go 1.27.4 or later and Make.
+macOS is the documented platform. A build from source needs Go 1.27.4 or later and Make.
 
-Install the command-line tools for the outputs you use and make them available on your `PATH`.
+Lens downloads its own pinned copies of Typst, Pandoc and Poppler (`pdftoppm`) on first use. Each file is checksum-checked against its published release. A copy on your `PATH` is used only if that download fails. You do not need to install those tools by hand.
 
 | Tool | Used for |
 | --- | --- |
-| Typst | Compile PDF reports |
-| Poppler (`pdftoppm`) | Render PDF pages for preview |
-| Pandoc | Export Word documents |
+| Typst 0.15.1 | Compile PDF reports |
+| Poppler 26.06.0 (`pdftoppm`) | Render PDF pages for preview |
+| Pandoc 3.14 | Export Word documents |
+
+## Install
+
+On macOS, with Homebrew:
+
+```sh
+brew install pairti-pty-ltd/tap/lens
+```
+
+You can then launch Lens from Spotlight.
 
 ## Build and run on macOS
 
