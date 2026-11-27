@@ -82,7 +82,7 @@ app: binary $(ICON_ICNS)
 	codesign --force --sign - "$(APP)"
 	@mkdir -p "$(HOME)/Applications"
 	rm -rf "$(DEST)"
-	cp -R "$(APP)" "$(DEST)"
+	mv -f "$(APP)" "$(DEST)"
 	codesign --force --sign - "$(DEST)"
 	@mdimport "$(DEST)" >/dev/null 2>&1 || true
 	@printf '\n  Installed %s\n  Spotlight: %s\n\n' "$(DEST)" "$(APP_NAME)"
