@@ -13,13 +13,13 @@ make binary
 
 Run from source with `CGO_ENABLED=0 go run ./cmd/pairti-lense`. Install the app bundle in `~/Applications/Lens.app` with `make app`.
 
-The browser Raw editor:
+Serve the shared browser workspace with
 
 ```sh
 make wasm-serve
 ```
 
-Open `http://127.0.0.1:8080/`. `make wasm` builds without serving.
+Open `http://127.0.0.1:8081/library/`. `make wasm` builds without serving.
 
 ```sh
 CGO_ENABLED=0 go test ./...
@@ -29,8 +29,8 @@ Some export tests need `typst`, `pdftoppm` or `pandoc` on `PATH`. They skip when
 
 ## Layout
 
-- `cmd/pairti-lense` is the desktop app.
-- `cmd/lens-wasm` is the browser Raw editor.
+- `cmd/pairti-lense` builds the desktop and browser workspace.
+- `cmd/lens-library` serves the Git-backed Markdown library.
 - `internal/ui` draws the window with GoGPU.
 - `internal/edit` is the Markdown buffer.
 - `internal/doc` and `internal/library` handle documents and the project library.

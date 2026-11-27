@@ -1,24 +1,17 @@
 # Pairti Lens
 
-## Motivation
-
-Oh no, not another Markdown viewer and editor. I keep the work as projects in Git, with several folders open at once, and I want a compiled Typst report, with a preview of the PDF pages. After years with Electron editors I wanted a fast app in Go, drawn on the GPU in a native OS window. Lens takes its lead from Zettlr. In use, Lens is neck-jerkingly fast.
-
-A desktop Markdown editor for notes and reports kept in Git repositories.
+Read and publish the Markdown that you, your editors, and your agents maintain in Git. Open several project folders in Lens, give a local agent the passage you are editing, and preview the exact PDF your report template produces.
 
 ![Pairti Lens with a project library, a Markdown note, and a Typst PDF preview](docs/images/lens-screenshot.png)
 
-## Why Lens
-
-Lens keeps several project folders open in one library. Reports compile through a Typst template. The preview shows the pages of that PDF. The app is a small Go program that opens a native OS window and draws it on the GPU with GoGPU. It does not use Electron or a web view.
-
-A local MCP connection lets an assistant on the same machine read and edit the focused note.
+[Project north stars](doc/concept.md) · [Editor keymap](doc/editor-keymap.md) · [Publishing design](doc/export-plan.md)
 
 ## Features
 
 - Project library. Several folders stay open in one window
 - The file tree lists one folder at a time and does not open generated trees such as `node_modules` and `.git`. Gitignored names are hidden by default, and a large folder is capped.
 - Markdown editing with an outline
+- A handy terminal built in, so a shell sits next to the note
 - Git history for a document or its project
 - Typst PDF preview and export
 - Pandoc export to `.docx`
@@ -26,8 +19,6 @@ A local MCP connection lets an assistant on the same machine read and edit the f
 - File watching with reloads after writes settle
 - MCP on loopback (`127.0.0.1:47328`) with a bearer token
 - MCP tools `document` and `apply_edit`, bound to the focused note
-
-See the [editor keymap](doc/editor-keymap.md) for keyboard shortcuts.
 
 ## Requirements
 

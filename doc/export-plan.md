@@ -1,30 +1,28 @@
-# Templated export
+# Publishing design
 
-Typst is the only layout. One compile writes `out/report.pdf`. The window shows images of that file. A second renderer is not part of this.
+Select a project and a report before exporting. Two projects may have reports with the same name. Keep the project path and report ID together from menu selection to export.
 
-Word and HTML are not this compile. Typst's HTML export is still experimental and the browser reflows it. Word has no Typst target. They stay later, and they are not the same pixels.
+| Writer’s choice | What owns it |
+| --- | --- |
+| Which documents appear, and in what order | The project's saved report in `.pairti-reports.json`. Include the listed files in sequence. |
+| Page design for a project template | The Typst template controls type, margins, headings, and page breaks. |
+| Branding for a PDF or Word export | A neutral default ships with Lens. User-installed brand packs supply shared identity, assets, and Word reference styles. |
+| What the PDF preview shows | The PDF produced by that export. Desktop rasterizes its pages with `pdftoppm`. Browser library mode previews and downloads the same response. |
+| An editable Word file | The Pandoc DOCX exporter uses the selected brand’s Word styles. Check the document in Word when pagination matters. |
 
-## Profile
+## Project Typst templates
 
-`lens.toml` in the project root names the template and the fields the template may read:
+For the project-template compile path, put a design in `templates/brief.typ` and select it in the project’s `lens.toml`. The project can also supply a root `template.typ`. The built-in design is available as `default`.
 
-```
+```toml
 template = "brief.typ"
 title = "Assay report"
-author = "Pairti"
+author = "Research team"
 date = "2026-11-22"
 ```
 
-A missing file, or `template = "default"`, uses the built-in A4 page. A value that is a file name is resolved under `templates/` and then the project root. `templates/*.typ` and a root `template.typ` are the project's templates.
+Lens converts the note to `body.typ`. The selected template receives the body and can read title, author, and date through `sys.inputs`. This path writes `out/report.pdf`. The export dialog also supports named output files and installed brands. [Brand pack setup](../README.md#report-brand-packs)
 
-The note becomes `body.typ`. The chosen template is the compile root. If it does not include `body.typ`, the include is added. Fields are passed as `typst compile --input title=... --input author=... --input date=...`. The built-in template prints title, author, and date, then the body. A project template may read the same inputs with `sys.inputs.at`.
+## Check a publication
 
-An empty title falls back to the note's first heading. An empty date falls back to the day of the compile.
-
-## Swap
-
-`:template` lists the names. `:template brief` writes `lens.toml` and compiles again. Export uses whatever `lens.toml` currently names. The pages in the window and `out/report.pdf` both come from that run. Formatted returns to the note.
-
-## Check
-
-A stand-in `typst` records the arguments and the template text. The test asserts the selected template, the `--input` fields, the PDF path, and that swapping the name changes the next compile. The window comparison needs a real `typst` on PATH and is not claimed until that has been looked at.
+Use two notes with visibly different headings. Select their order, export, and inspect the first heading on each section and the page breaks in the preview and saved PDF. Change the template and repeat. In browser library mode, save edits before exporting. The server reads the saved checkout. If preview generation fails, distinguish that failure from failure to compile the PDF.

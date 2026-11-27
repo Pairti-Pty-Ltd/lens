@@ -1,75 +1,31 @@
-# Pairti Lens
+# Lens north stars
 
-Working name, taken from this repo. A desktop tool for moving between projects, writing Markdown, and reading the report Typst laid out from a template.
+Assume a project already has several local editors, a Git workflow, and agents that change files while someone is reading them. Open Lens when you need to read the result in context, revise a passage with an agent, or see exactly what a report will publish.
 
-Four features, taken from Zettlr and narrowed.
+## Work in the same checkout
 
-1. **Multi-project navigation.** Several project folders stay open. You move between them in one window.
-2. **Native Markdown.** The file you write is Markdown on disk. The app does not edit a converted copy.
-3. **Typst viewing.** The report you read is the Typst page. The view and the exported file are one compile.
-4. **Template-driven reports.** A Typst template fixes the page. Same sources and same template produce the same pixels.
+A writer should be able to edit a note in their preferred editor, let an agent update a neighbouring file, and inspect both in Lens. Keep Markdown readable on disk and changes reviewable in Git. A library remembers folders. Removing a folder from the library leaves its files intact.
 
-The product decision is: which report, in which project, and do the pages match the template.
+## Give the agent the passage the writer is looking at
 
-Zettlr (zettlr.com) is the reference for navigation and for publishing a folder through a chosen template. It is not the spec.
+On desktop, the local MCP tool `document` exposes the focused buffer, including unsaved text, the selection, and its path. An agent revising a paragraph should read it first, then pass the path and expected text to `apply_edit`. If the writer has switched documents or revised the passage, refuse the stale edit. A successful edit appears in the open draft as one undo step. The writer decides when to save.
 
-## Multi-project navigation
+An agent or another editor can also write directly to disk. Reload a clean buffer after the write settles. If the writer has a draft, surface the change and let them choose how to reconcile the two versions. Test both paths with the same note.
 
-A library is the folders this install has open, stored as paths. Opening a folder adds it. Removing it drops the path and does not delete the folder. A missing path stays listed and reads as absent.
+## Make switching projects cheap
 
-A project is one folder. Its name comes from `lens.toml` if that file exists, otherwise from the folder name. The window lists every open project. Inside a project the rows are documents, labelled by the first Markdown heading, otherwise the filename. A path segment longer than about 40 characters is cut. Filter matches project names, titles, and relative paths. It does not scan bodies.
+Keep several folders in one window. Show enough of the project and relative path to distinguish two notes with the same title. The tree filter helps writers find a file by name, title, or path. Body search takes them to a passage. Opening a second note or splitting the view must preserve the first draft and its place. Measure responsiveness from the writer’s action to the visible result.
 
-You do not close one project to see another.
+## Give each note one editing history
 
-## Native Markdown
+Markdown is the source. Raw and Formatted share the buffer, cursor, selection, and undo history. Use Goldmark to understand document structure. Opening a note or changing views must preserve unfamiliar markup. If the file changes underneath a draft, keep the writer’s edits available until they choose how to resolve it. [Editor keymap](editor-keymap.md)
 
-Documents are `.md` and `.markdown`. They stay CommonMark plus the small set the template bind knows: headings, lists, tables, fenced code, links, images, footnotes. That set is written down when the first template bind exists.
+## Publish the report the writer selected
 
-The browser shows the Markdown. Editing, when it exists, writes those same bytes back. There is no shadow document, no HTML round-trip, and no Typst source standing in for the note.
+The project, report, ordered sources, and chosen template determine the publication. Typst owns PDF layout. When a writer compares preview and download, every page break, table, and image should match because both come from the same PDF. Word has its own exporter and styles. Keep organisation-specific assets in installable brand packs. [Publishing design](export-plan.md)
 
-## Typst viewing
+## Share the workspace across desktop and browser
 
-Typst is how a report is seen, not a second language you write the report in.
+Use the same Go editor, sidebar, menus, and pane layout wherever the interaction is the same. Put the differences at the storage and platform boundaries. Save writes to a local file on desktop or to the served checkout in browser library mode. A browser save against a stale revision must leave the draft recoverable. [Browser workspace](../wiki/topics/browser-wasm-editor.md)
 
-A view is the pages of one Typst compile. The app runs the Typst compiler and shows those pages. Export writes the PDF of that same compile. What you see is that file. A web-view reflow is not a report view.
-
-We do not reimplement Typst. Math, type, and page breaking stay in the compiler. `.typ` files are templates and partials. They are not documents in the navigation list.
-
-## Template-driven reports
-
-A report is a Typst template applied to the project's Markdown.
-
-The template owns page size, type, margins, headings, tables, and where the body goes. The project points at one template in `lens.toml`. The template may live in the project or in a shared template set. Swapping the template and compiling again is how a second report design is made. The UI does not restyle a report by itself.
-
-Pixel-perfect means one compile feeds the view and the file. Two renders are a bug.
-
-Zettlr's export profile is the analogy: a named way out, bound to a template, run on the project. The layout engine is Typst. A converter may turn Markdown into the compiler's input. Pandoc is not the layout engine. It may be that converter later, if we need it. Not decided here.
-
-One project, one active report template. Several profiles can wait. Outputs go in `out/`. Compiler errors stay with the job.
-
-## What we do not copy
-
-- Electron, or a browser widget as the shell.
-- Pandoc as the thing that decides where ink goes.
-- Writing the report as Typst. Typst source is the template.
-- Zettelkasten IDs, tags, snippets, and writing statistics. They do not define the product.
-- A viewer per output kind. The report view is the Typst page. HTML and source-code browsers can be added later. They are not reports.
-
-## Stack
-
-Go, module `pairti-lense`. UI on [GoGPU](https://github.com/gogpu): `gogpu/ui` for widgets, `gogpu/gogpu` for the window, `gogpu/gg` for drawing. Pure Go, `CGO_ENABLED=0`. The report pages are drawn on that same surface.
-
-This is a bet. As of November 2026, `gogpu/ui` is v0.1.x (v0.1.55). `gogpu/editor` is early and is not a dependency. Non-Latin text, IME, and Wayland input are known weak spots, and `@latest` has failed to compile for other people. Versions are pinned. The Markdown buffer is ours.
-
-The Typst CLI is the compiler. Gio is the fallback shell if build 0 rejects GoGPU. That is written down before any template work.
-
-## Builds
-
-| Build | Proves |
-| --- | --- |
-| 0 | Multi-project navigation. Markdown files listed by title. The selected source readable. GoGPU accepted or rejected. |
-| 1 | Edit and save the Markdown in place. |
-| 2 | One Typst template on one project. One compile. Pages in the window, and the same PDF in `out/`. |
-| 3 | Swap the template. The pages and the file change together. |
-
-Build 0 is only the first row. Details are in `doc/build-0.md`.
+Judge a change by what the writer can see, save, reopen, or publish. [Viewer verification](viewer-plan.md)
