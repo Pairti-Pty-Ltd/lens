@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lens</title>
+<style>
+:root {color-scheme:dark; font:14px system-ui; background:#050505; color:#eee}
+body {margin:0; height:100dvh; display:flex; flex-direction:column}
+header {display:flex; align-items:center; min-height:32px; background:#181818; border-bottom:1px solid #333; gap:2px; flex-wrap:wrap}
+nav {display:flex; flex-wrap:wrap}
+details {position:relative}
+summary,button {font:inherit; cursor:pointer}
+summary {list-style:none; padding:4px 8px}
+summary::-webkit-details-marker {display:none}
+summary:hover,details[open]>summary,button:hover:enabled {background:#383838}
+.panel {position:absolute; z-index:2; top:100%; left:0; min-width:180px; padding:4px; border:1px solid #454545; background:#222; max-height:65vh; overflow:auto}
+.panel button {display:block; width:100%; text-align:left; white-space:nowrap; border:0; background:transparent; padding:5px 10px}
+.panel details .panel {position:static; border:0; margin-left:8px}
+#status {padding:0 8px; color:#aaa}
+main {position:relative; flex:1; min-height:0}
+main canvas {position:absolute; inset:0; width:100% !important; height:100% !important}
+#paint {pointer-events:none}
+</style>
+<header><nav aria-label="Lens menus"></nav><span id="status" role="status">Loading Lens…</span></header>
+<input id="file" type="file" accept=".md,.markdown,text/markdown" hidden>
+<main><canvas tabindex="0" aria-label="Lens workspace"></canvas><canvas id="paint" aria-hidden="true"></canvas></main>
+<script src="wasm_exec.js"></script>
+<script>
+window.libraryMode = location.pathname === '/library/';
+const nav = document.querySelector('nav'), statusLine = document.querySelector('#status');
+const canvas = document.querySelector('canvas'), picker = document.querySelector('#file');
+const imports = new Map(), revisions = new Map(), writing = new Set();
+const documentURL = path => '/api/document?' + new URLSearchParams({path});
+const decode = bytes => new TextDecoder('utf-8', {fatal:true, ignoreBOM:true}).decode(bytes);
+function showError(message) { statusLine.textContent = message; }
+async function checked(url, options) {
+  const response = await fetch(url, options);
+  if (!response.ok) throw Error((await response.text()).trim() || response.statusText);
+  return response;
+}
+async function readMarkdown(path) {
+  if (!libraryMode) return {text:imports.get(path), revision:''};
+  const response = await checked(documentURL(path));
+  return {text:decode(await response.arrayBuffer()), revision:response.headers.get('ETag')};
+}
+function openedMarkdown(path, tag) {
+  revisions.set(path, tag);
+  document.title = path + ' — Lens';
+  statusLine.textContent = '';
+  canvas.focus();
+}
+function download(path, text) {
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(new Blob([text], {type:'text/markdown;charset=utf-8'}));
+  link.download = path.split('/').pop();
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+async function writeMarkdown(path, text) {
+  if (!libraryMode) {
+    download(path,text);
+    imports.set(path,text);
+    return;
+  }
+  if (writing.has(path)) throw Error('Save already in progress.');
+  writing.add(path);
+  try {
+    const response = await checked(documentURL(path), {
+      method:'PUT', headers:{'If-Match':revisions.get(path),'Content-Type':'text/plain;charset=utf-8'}, body:text
+    });
+    revisions.set(path,response.headers.get('ETag'));
+    statusLine.textContent = 'Saved ' + path;
+  } catch (error) {
+    showError(error.message);
+    throw error;
+  } finally { writing.delete(path); }
+}
+picker.onchange = async () => {
+  const file = picker.files[0];
+  picker.value = '';
+  if (!file) return;
+  try {
+    const text = decode(await file.arrayBuffer());
+    const prior = imports.get(file.name);
+    imports.set(file.name,text);
+    setDocuments(Array.from(imports.keys()));
+    if (!openImported(file.name) && prior !== undefined) imports.set(file.name,prior);
+  } catch(error) { showError(error.message); }
+};
+window.addEventListener('beforeunload', e => {
+  if (window.hasEdits?.()) { e.preventDefault(); e.returnValue=''; }
+});
+
+function closeMenus() { nav.querySelectorAll('details[open]').forEach(el => el.open=false); }
+function group(parent, label) {
+  const el = document.createElement('details'), title = document.createElement('summary'), panel = document.createElement('div');
+  title.textContent = label;
+  panel.className = 'panel';
+  el.append(title,panel);
+  parent.append(el);
+  return {el,panel};
+}
+function action(panel,label,enabled,click) {
+  const btn = document.createElement('button');
+  btn.textContent = label;
+  btn.disabled = !enabled;
+  btn.onclick = () => {closeMenus(); canvas.focus(); click();};
+  panel.append(btn);
+}
+function fillMenu(label,panel) {
+  panel.replaceChildren();
+  if (label==='File' && !libraryMode) action(panel,'Import Markdown…',true,()=>picker.click());
+  const panels = new Map([[label,panel]]);
+  for (const item of menuItems()) {
+    const parts = item.group.split('\0');
+    if (parts[0]!==label) continue;
+    let parent = panel, key = label;
+    for (const part of parts.slice(1)) {
+      key += '\0' + part;
+      if (!panels.has(key)) panels.set(key,group(parent,part).panel);
+      parent = panels.get(key);
+    }
+    action(parent,(item.checked?'✓ ':'') + item.title,item.enabled,()=>invokeMenu(item.group,item.title));
+  }
+  if (label==='File') action(panel,'Download Markdown',!!activePath(),()=>libraryMode ? download(activePath(),markdownText()) : invokeMenu('File','Save'));
+}
+function installMenus() {
+  const labels = new Set(menuItems().map(item=>item.group.split('\0')[0]));
+  for (const label of labels) {
+    const {el,panel} = group(nav,label);
+    el.ontoggle = () => {
+      if (!el.open) return;
+      for (const other of nav.children) if (other!==el) other.open=false;
+      fillMenu(label,panel);
+    };
+  }
+}
+document.addEventListener('pointerdown',e=>{if (!nav.contains(e.target)) closeMenus();});
+document.addEventListener('keydown',e=>{if(e.key==='Escape' && nav.querySelector('details[open]')){closeMenus(); canvas.focus();}});
+async function start() {
+  if (!navigator.gpu || !await navigator.gpu.requestAdapter()) throw Error('WebGPU unavailable. Enable hardware acceleration in Chrome and open the localhost URL.');
+  const go = new Go();
+  const {instance} = await WebAssembly.instantiateStreaming(fetch('lens.wasm'),go.importObject);
+  const running = go.run(instance);
+  if (go.exited) throw Error('Lens could not start.');
+  const names = libraryMode ? await (await checked('/api/documents')).json() : [];
+  setDocuments(names);
+  installMenus();
+  statusLine.textContent = libraryMode ? (names.length?'':'No tracked Markdown files.') : 'Use File → Import Markdown to open a note.';
+  await running;
+  showError('Lens stopped. Reload to restart.');
+}
+start().catch(error=>showError(error.message));
+</script>
+</html>

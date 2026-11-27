@@ -1,0 +1,13 @@
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+
+/build/
+
+# Local agent connections and generated environment instructions.
+/.grok/config.toml
+/.grok/rules/poe-mcp.md
+/.mcp.json
+/.gemini/settings.json

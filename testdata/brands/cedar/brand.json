@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "label": "Cedar Studio",
+  "logo": "logo.png",
+  "reference": "reference.docx",
+  "stylePrefix": "Cedar",
+  "author": "Cedar Studio",
+  "header": "Cedar field notes",
+  "licence": "For the sample collection.",
+  "disclosure": "Prepared from fictional observations."
+}
