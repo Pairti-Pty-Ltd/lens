@@ -41,16 +41,23 @@ The macOS app bundles all three tools below. Packaging verifies the downloaded a
 | Poppler 26.06.0 (`pdftoppm`) | Render PDF pages for preview |
 | Pandoc 3.14 | Export Word documents |
 
-## Install
+## Install with Homebrew on macOS
 
-The current install method is `make app`, described below. Once the first signed release and Homebrew cask are published, use:
+The Homebrew cask is pending its first release. To install Lens today, run `make app` from this checkout.
+
+Once the cask is published, run this command to install Lens.
 
 ```sh
 brew install --cask pairti-pty-ltd/tap/pairti-lens
+```
+
+Open **Lens** from Spotlight. To upgrade later, run this command.
+
+```sh
 brew upgrade --cask pairti-pty-ltd/tap/pairti-lens
 ```
 
-If Homebrew prompts for tap trust, use `brew trust --cask pairti-pty-ltd/tap/pairti-lens` and retry the install.
+If Homebrew prompts for tap trust, run `brew trust --cask pairti-pty-ltd/tap/pairti-lens` and retry the install.
 
 ## Build and run on macOS
 
