@@ -1,43 +1,39 @@
 ---
 title: Viewer Verification Plan
 type: topic
-sources: [doc:///viewer-plan.md, doc:///todo.md, beads]
-related: [entities/pairti-lens.md, entities/lens-editor.md, entities/embedded-shell.md, topics/ui-layout-and-surfaces.md, topics/build-roadmap.md]
+sources: [doc:///viewer-plan.md, doc:///concept.md, beads]
+related: [entities/pairti-lens.md, entities/lens-editor.md, entities/embedded-shell.md, topics/ui-layout-and-surfaces.md, topics/single-compile-rendering.md]
 updated: 2026-11-28
 ---
 
 # Viewer Verification Plan
 
-The Viewer Verification Plan defines a strict release gate for [[Pairti Lens]]: passing `go test` alone is insufficient for visual features. Every user-visible item requires explicit canvas-level tests and/or manual window inspection with recorded evidence before advancing to later phases.
+The Viewer Verification Plan (`doc/viewer-plan.md`) defines how changes to [[Pairti Lens]] are judged: by what the writer can see, save, reopen, or publish. It separates automated canvas-level assertions from live window checks and requires recording file, platform, action, and visible result (marking unrun checks pending).
 
 ## Details
-- **Two verification types**:
-  - **Test**: drives the widget and asserts what is drawn on the canvas (text string, colour, caret rect, bounds)—never just a return value.
-  - **Window**: launches the real app, performs the user action on real files, and records the file used and what appeared on screen.
-- **Phase 1 — Core viewer sign-off (implemented, awaiting window sign-off)**:
-  1. **Search**: sidebar field paints unclipped characters and filters project names, titles, and paths; clearing restores tree.
-  2. **Hidden and Ignored**: two 28px icon slots (eye for dotfiles, slashed circle for gitignored; grey = hidden, blue = shown; `.git` and `node_modules` stay hidden; no text labels; `TestProjectTogglesChangeTheTree`).
-  3. **Markdown page**: headings, paragraphs, lists, quotes, tables, fenced code, links; title shown once; long lines wrap (`testdata/membrane-assay.md` + real note).
-  4. **Images and diagrams**: local images inline (shrunk only if wider than column); `mermaid` fences render via `mmdc` or show `mmdc not installed`.
-  5. **Source files**: `.ts`, `.go`, etc. render as syntax-highlighted code (blue keywords, grey comments with `*` preserved, green strings; `TestPageHighlightsSource`).
-  6. **Caret and vi**: caret on line 1 with line highlight, visible on blank lines; `h j k l`, `i`, Escape, `:w`, `:q`.
-  7. **Formatted and Raw**: mode toggle with per-mode line-number memory; Save appears when dirty and writes same path.
-  8. **Tabs and split**: tab per open file; drag-right or Split icon toggles second pane; closing dirty tab refused with `Unsaved`.
-  9. **Outline**: right-hand icon opens table of contents; clicking a heading scrolls preview to that line.
-  10. **Footer**: single status row from frame 1 without growing or waiting for resize (`TestFooterStaysOneLine`).
-  11. **Scroll**: macOS natural scroll direction, one short step per trackpad tick on both file list and document.
-- **Phase 2 — Missing viewer features (starts only after Phase 1 window sign-off)**:
-  - Search inside files, New document, Undo & pointer selection drag, Markup inserts (code/link/image/table/footnote), Back/Forward navigation, Settings screen (beyond `theme.json`), Tags, and Typst Report export (requires `typst` on `PATH`).
-- **Phase 3 — Embedded Shell (starts only after Phase 1 window checks are closed)**:
-  - Fix prompt font glyphs and wire command output display (`echo` test + `pwd` window check).
-- **Out of viewer gate**: language-model agents, Word export, and HTML export remain behind the report milestone.
+- **Verification discipline**:
+  - Use a temporary copy for save checks.
+  - **Canvas assertions** catch clipped lines or misplaced carets in automated tests (`CGO_ENABLED=0 go test ./...`).
+  - **Window checks** exercise focus, input, layout, and platform integration together; record automated and window results separately, naming the fixture, exact action, and what appeared on screen.
+- **11-surface verification matrix** (`doc/viewer-plan.md`):
+  1. **Files sidebar**: open two folders with similarly named notes, filter by title/path, clear field, toggle hidden and ignored separately → typed text fits, matching rows keep project context, clearing restores tree, `.git` stays hidden.
+  2. **Markdown page**: open `testdata/membrane-assay.md` and a long note → text wraps inside column, headings appear once in body, tables/links/local images/Mermaid fences render (or show visible fallback when renderer is unavailable).
+  3. **Source view**: open a Go or TypeScript file with a comment containing `*` → syntax colours distinguish comments and keywords; `*` survives as source text.
+  4. **Caret and modes**: move through a blank line, enter Edit, type a word, press Escape, select text, switch between Raw and Formatted, undo → both views show the same edit and selection, caret stays visible, caret bounds verified in canvas test.
+  5. **Saving**: edit one word in a temporary note with unfamiliar markup, save and reopen from disk, try closing a second dirty note → file contains only the intended change; close protects the unsaved draft.
+  6. **Navigation**: open two tabs, split, change focus, follow an outline heading, use back/forward, search for a body-only word → commands affect focused pane, selected heading or search hit is visible, other pane keeps its place.
+  7. **Editing controls**: create a note, insert a table, undo, drag-select a word and replace it → inspect buffer and rendered note; new file appears at selected location.
+  8. **Project controls**: tag a file and filter by tag; change a persistent setting and reopen Lens → filter selects intended file; saved setting survives restart.
+  9. **Layout and scrolling**: launch, open a note, scroll sidebar and document, resize → footer fits from frame 1, each scroll acts on intended surface, check clipping and caret visibility at narrower width.
+  10. **Terminal on desktop**: focus terminal, run `pwd`, return to document → prompt is legible, `pwd` prints working directory, subsequent typing goes to focused surface.
+  11. **Publishing**: export an ordered report and compare preview with saved PDF → section order, images, and page breaks match the same output file.
 
 ## Decisions & Tradeoffs
-- **Parking the shell**: Halting [[Embedded Shell]] work prevents splitting effort while core viewer regressions (rendering, hit testing, footer height, scroll feel) remain unverified on screen.
-- **Canvas-level test assertions**: Requiring tests to inspect drawn strings, colours, and caret rects catches layout and clipping bugs that logic-only unit tests miss.
-- **macOS live-window automation permission gate** (`lens-c8t`): Automated native window checks against `Lens.app` fail when macOS screen capture and input permissions are absent (`CGPreflightScreenCaptureAccess`, `CGPreflightPostEventAccess`, and `AXIsProcessTrusted` all return `false`, producing *"Computer Use permissions are not granted"*). In headless/unprivileged runs, canvas-level `CGO_ENABLED=0 go test ./...` suites can verify rendering and rail heading navigation, while live native window sign-off requires an environment with macOS Screen Recording and Accessibility permissions granted.
+- **Canvas + window split**: Canvas tests catch geometry, clipping, and caret bugs reproducibly in CI, while live window checks verify focus, platform menus, and input routing end to end.
+- **macOS live-window automation permission gate** (`lens-c8t`): Automated native window checks against `Lens.app` fail when macOS Screen Recording and Accessibility permissions are absent (`CGPreflightScreenCaptureAccess`, `CGPreflightPostEventAccess`, `AXIsProcessTrusted` return `false`). In headless runs, `CGO_ENABLED=0 go test ./...` verifies canvas rendering while live window checks remain pending until run in a permitted session.
 
 ## See Also
 - [[UI Layout and Surfaces]]
-- [[Build Roadmap]]
+- [[Single-Compile Rendering]]
 - [[Embedded Shell]]
+- [[Lens Editor]]

@@ -1,9 +1,9 @@
 ---
 title: Editor Keymap and Modes
 type: topic
-sources: [doc:///editor-keymap.md, doc:///build-1.md, doc:///viewer-plan.md]
+sources: [doc:///editor-keymap.md, doc:///viewer-plan.md]
 related: [entities/lens-editor.md, entities/pairti-lens.md, topics/viewer-verification-plan.md]
-updated: 2026-11-27
+updated: 2026-11-28
 ---
 
 # Editor Keymap and Modes

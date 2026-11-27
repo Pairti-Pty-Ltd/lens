@@ -1,28 +1,26 @@
 ---
 title: Embedded Shell
 type: entity
-sources: [doc:///viewer-plan.md, doc:///todo.md]
-related: [entities/pairti-lens.md, topics/viewer-verification-plan.md, topics/build-roadmap.md]
-updated: 2026-11-27
+sources: [doc:///viewer-plan.md]
+related: [entities/pairti-lens.md, topics/viewer-verification-plan.md, topics/browser-wasm-editor.md]
+updated: 2026-11-28
 ---
 
 # Embedded Shell
 
-The Embedded Shell is an in-app command runner panel in [[Pairti Lens]] that runs a real subprocess with ANSI colour codes stripped rather than emulating a full terminal. It is explicitly parked until all Phase 1 document viewer window checks pass.
+The Embedded Shell (desktop terminal panel) is an in-app terminal surface in [[Pairti Lens]] on desktop (`internal/term` / `internal/ui/console.go`). It lets writers run shell commands without leaving the workspace and is excluded from browser WebAssembly builds (`//go:build !js`).
 
 ## Key Facts
-- **Current status**: parked (Phase 3 of [[Viewer Verification Plan]]).
-- **Known defects blocking release**:
-  1. **Prompt font**: currently uses a font missing prompt glyphs, rendering a row of question marks.
-  2. **Command output**: typing a command and pressing Return does not yet display command output in the panel.
-- **Design scope**: runs a real OS process and strips ANSI escape/colour codes; intentionally not a full VT100/xterm terminal emulator.
-- **Exit checks**:
-  - Window check for prompt font: open Shell and read a properly rendered prompt.
-  - Automated + window check for command output: test asserts `echo` token appears in transcript; window check runs `pwd` and verifies the directory appears.
+- **Desktop-only surface**: runs a local PTY/subprocess on desktop; excluded from `GOOS=js GOARCH=wasm` builds so `internal/ui` remains WASM-safe.
+- **Verification criteria** (`doc/viewer-plan.md`):
+  - Focus the terminal, run `pwd`, then return focus to the document.
+  - The prompt must be legible, `pwd` must print the working directory, and subsequent typing must route cleanly to whichever surface has focus.
+- **Menu & clipboard routing**: on macOS, edit and clipboard commands route to the PTY terminal when it is the focused surface (`cmd/pairti-lense/main_menu_edit.go`).
 
 ## How It Works
-The shell panel spawns a subprocess, captures stdout/stderr, strips ANSI colour sequences, and appends the output to a scrollable transcript panel inside the [[Pairti Lens]] window.
+The desktop terminal panel spawns an interactive shell process inside the Pairti Lens window and shares focus routing with the document editor and text fields so keyboard input always targets the active surface.
 
 ## Relationships
-- Gated behind Phase 1 of [[Viewer Verification Plan]].
-- Tracked alongside future features (agents, extra diagram renderers) in [[Build Roadmap]].
+- Verified under Terminal on desktop in [[Viewer Verification Plan]].
+- Excluded at the desktop/browser boundary in [[Browser WASM Editor]].
+- Participates in focus-aware Edit menu routing in [[macOS Native Integration]].

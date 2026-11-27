@@ -1,7 +1,7 @@
 ---
 title: Report Brand Packs
 type: topic
-sources: [beads]
+sources: [doc:///concept.md, doc:///export-plan.md, beads]
 related: [entities/typst.md, entities/lens-toml.md, topics/single-compile-rendering.md]
 updated: 2026-11-28
 ---
