@@ -2,6 +2,7 @@ package report
 
 import (
 	"archive/zip"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"net/http"
@@ -175,4 +176,19 @@ func TestPinnedTypstInstalls(t *testing.T) {
 	if !strings.HasPrefix(bin, dir) && filepath.Base(filepath.Dir(bin)) != "MacOS" && filepath.Base(filepath.Dir(bin)) != "Resources" {
 		t.Fatalf("bin %s is not the app copy", bin)
 	}
+}
+
+type typstFetch struct {
+	URL  string
+	SHA  string
+	File string
+	Dest string
+}
+
+func fetchTypst(ctx context.Context, spec typstFetch) (string, error) {
+	return fetchBinary(ctx, archiveSpec{
+		URL: spec.URL, SHA: spec.SHA, File: spec.File, Dest: spec.Dest,
+		Label: "typst", Version: typstVersion, Names: []string{"typst", "typst.exe"},
+		Bin: typstName(),
+	})
 }

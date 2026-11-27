@@ -1,0 +1,13 @@
+Typst 0.15.1
+https://github.com/typst/typst/tree/v0.15.1
+The release LICENSE and NOTICE accompany the executable.
+
+Pandoc 3.14
+https://github.com/jgm/pandoc/tree/3.14
+The macOS release embeds its default data files.
+
+Poppler 26.06.0 (unpins build 1)
+https://github.com/unpins/poppler-utils/tree/v26.06.0-1
+https://poppler.freedesktop.org/poppler-26.06.0.tar.xz
+The pinned build recipe and flake.lock identify the linked sources and
+patches. The executable embeds Poppler's encoding and character map data.

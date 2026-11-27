@@ -59,19 +59,25 @@ func Bin() (string, error) {
 	return "", installErr
 }
 
-func bundledDirs() []string {
+func executableDirs(appOnly bool) []string {
 	var dirs []string
 	if exe, err := os.Executable(); err == nil {
 		if resolved, err := filepath.EvalSymlinks(exe); err == nil {
 			exe = resolved
 		}
 		dir := filepath.Dir(exe)
-		dirs = append(dirs, dir)
 		parent := filepath.Dir(dir)
 		if filepath.Base(dir) == "MacOS" && filepath.Base(parent) == "Contents" {
-			dirs = append(dirs, filepath.Join(parent, "Resources"))
+			dirs = append(dirs, dir, filepath.Join(parent, "Resources"))
+		} else if !appOnly {
+			dirs = append(dirs, dir)
 		}
 	}
+	return dirs
+}
+
+func bundledDirs() []string {
+	dirs := executableDirs(false)
 	if dir, err := installDir(); err == nil {
 		dirs = append(dirs, dir)
 	}
@@ -94,20 +100,22 @@ func typstName() string {
 }
 
 func locateTypst(dirs []string, lookup func(string) (string, error)) (string, error) {
+	return locateTool(typstName(), dirs, lookup)
+}
+
+func locateTool(name string, dirs []string, lookup func(string) (string, error)) (string, error) {
 	for _, dir := range dirs {
-		for _, name := range []string{"typst", "typst.exe"} {
-			p := filepath.Join(dir, name)
-			if executable(p) {
-				return p, nil
-			}
-		}
-	}
-	if lookup != nil {
-		if p, err := lookup(typstName()); err == nil {
+		p := filepath.Join(dir, name)
+		if executable(p) {
 			return p, nil
 		}
 	}
-	return "", &NotInstalledError{Name: "typst"}
+	if lookup != nil {
+		if p, err := lookup(name); err == nil {
+			return p, nil
+		}
+	}
+	return "", &NotInstalledError{Name: name}
 }
 
 func executable(path string) bool {
@@ -122,32 +130,26 @@ func executable(path string) bool {
 }
 
 func fetchPinned(ctx context.Context) (string, error) {
-	key := runtime.GOOS + "/" + runtime.GOARCH
-	asset, ok := typstAssets[key]
-	if !ok {
-		return "", fmt.Errorf("typst %s: no binary for %s", typstVersion, key)
-	}
 	dir, err := installDir()
 	if err != nil {
 		return "", err
 	}
-	url := "https://github.com/typst/typst/releases/download/v" + typstVersion + "/" + asset.file
-	return fetchTypst(ctx, typstFetch{URL: url, SHA: asset.sha, File: asset.file, Dest: dir})
+	spec, err := typstSpec()
+	if err != nil {
+		return "", err
+	}
+	spec.Dest = dir
+	return fetchBinary(ctx, spec)
 }
 
-type typstFetch struct {
-	URL  string
-	SHA  string
-	File string
-	Dest string
-}
-
-func fetchTypst(ctx context.Context, spec typstFetch) (string, error) {
-	return fetchBinary(ctx, archiveSpec{
-		URL: spec.URL, SHA: spec.SHA, File: spec.File, Dest: spec.Dest,
-		Label: "typst", Version: typstVersion, Names: []string{"typst", "typst.exe"},
-		Bin: typstName(),
-	})
+func typstSpec() (archiveSpec, error) {
+	key := runtime.GOOS + "/" + runtime.GOARCH
+	asset, ok := typstAssets[key]
+	if !ok {
+		return archiveSpec{}, fmt.Errorf("typst %s: no binary for %s", typstVersion, key)
+	}
+	return archiveSpec{URL: "https://github.com/typst/typst/releases/download/v" + typstVersion + "/" + asset.file,
+		SHA: asset.sha, File: asset.file, Label: "typst", Version: typstVersion, Names: []string{typstName()}, Bin: typstName()}, nil
 }
 
 // archiveSpec is one pinned compiler download.
@@ -187,60 +189,12 @@ func fetchBinary(ctx context.Context, spec archiveSpec) (string, error) {
 }
 
 func fetchArchive(ctx context.Context, spec archiveSpec, dest string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, spec.URL, nil)
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("User-Agent", "pairti-lense")
-	client := &http.Client{Timeout: 3 * time.Minute}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("%s %s: %s", spec.Label, spec.Version, err.Error())
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("%s %s: download returned %s", spec.Label, spec.Version, resp.Status)
-	}
-	archive, err := os.CreateTemp("", "typst-archive-*")
-	if err != nil {
-		return "", err
-	}
-	archiveName := archive.Name()
-	defer os.Remove(archiveName)
-	sum := sha256.New()
-	total := resp.ContentLength
-	if total < 0 {
-		total = 0
-	}
-	limit := int64(80 << 20)
-	if spec.Label == "pandoc" {
-		limit = 96 << 20
-	}
-	body := &progressReader{r: io.LimitReader(resp.Body, limit), total: total, name: spec.Label + " " + spec.Version}
-	if _, err := io.Copy(io.MultiWriter(archive, sum), body); err != nil {
-		archive.Close()
-		return "", fmt.Errorf("%s %s: %s", spec.Label, spec.Version, err.Error())
-	}
-	if err := archive.Close(); err != nil {
-		return "", err
-	}
-	got := hex.EncodeToString(sum.Sum(nil))
-	if got != strings.ToLower(spec.SHA) {
-		return "", fmt.Errorf("%s %s: checksum mismatch", spec.Label, spec.Version)
-	}
-	stage, err := os.MkdirTemp("", "typst-stage-*")
+	stage, err := os.MkdirTemp("", "lens-tool-*")
 	if err != nil {
 		return "", err
 	}
 	defer os.RemoveAll(stage)
-	if strings.HasSuffix(spec.File, ".zip") {
-		err = extractZip(archiveName, stage)
-	} else if strings.HasSuffix(spec.File, ".tar.gz") || strings.HasSuffix(spec.File, ".tgz") {
-		err = extractTarGZ(archiveName, stage)
-	} else {
-		err = extractTarXZ(archiveName, stage)
-	}
-	if err != nil {
+	if err := unpackRelease(ctx, spec, stage); err != nil {
 		return "", err
 	}
 	src, err := findNamed(stage, spec.Names)
@@ -276,6 +230,78 @@ func fetchArchive(ctx context.Context, spec archiveSpec, dest string) (string, e
 		return "", err
 	}
 	return dest, nil
+}
+
+// unpackRelease verifies the release bytes before extracting any files.
+func unpackRelease(ctx context.Context, spec archiveSpec, stage string) error {
+	archive, err := os.CreateTemp("", "lens-archive-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(archive.Name())
+	err = downloadVerified(ctx, spec, archive)
+	closeErr := archive.Close()
+	if err != nil {
+		return err
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	switch {
+	case strings.HasSuffix(spec.File, ".zip"):
+		return extractZip(archive.Name(), stage)
+	case strings.HasSuffix(spec.File, ".tar.gz"), strings.HasSuffix(spec.File, ".tgz"):
+		return extractTarGZ(archive.Name(), stage)
+	case strings.HasSuffix(spec.File, ".zst"):
+		out, err := os.Create(filepath.Join(stage, spec.Bin))
+		if err != nil {
+			return err
+		}
+		cmd := exec.CommandContext(ctx, "zstd", "-dc", archive.Name())
+		cmd.Stdout, cmd.Stderr = out, os.Stderr
+		runErr := cmd.Run()
+		closeErr := out.Close()
+		if runErr != nil {
+			return runErr
+		}
+		return closeErr
+	default:
+		return extractTarXZ(archive.Name(), stage)
+	}
+}
+
+func downloadVerified(ctx context.Context, spec archiveSpec, archive io.Writer) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, spec.URL, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("User-Agent", "pairti-lense")
+	client := &http.Client{Timeout: 3 * time.Minute}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("%s %s: %s", spec.Label, spec.Version, err.Error())
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("%s %s: download returned %s", spec.Label, spec.Version, resp.Status)
+	}
+	sum := sha256.New()
+	total := resp.ContentLength
+	if total < 0 {
+		total = 0
+	}
+	limit := int64(80 << 20)
+	if spec.Label == "pandoc" {
+		limit = 96 << 20
+	}
+	body := &progressReader{r: io.LimitReader(resp.Body, limit), total: total, name: spec.Label + " " + spec.Version}
+	if _, err := io.Copy(io.MultiWriter(archive, sum), body); err != nil {
+		return err
+	}
+	if hex.EncodeToString(sum.Sum(nil)) != strings.ToLower(spec.SHA) {
+		return fmt.Errorf("%s %s: checksum mismatch", spec.Label, spec.Version)
+	}
+	return nil
 }
 
 type progressReader struct {
