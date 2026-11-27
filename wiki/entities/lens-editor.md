@@ -2,7 +2,7 @@
 title: Lens Editor
 type: entity
 sources: [doc:///concept.md, doc:///editor-keymap.md, doc:///viewer-plan.md, beads]
-related: [entities/pairti-lens.md, entities/goldmark-and-markdown.md, topics/editor-keymap-and-modes.md, topics/viewer-verification-plan.md, topics/browser-wasm-editor.md]
+related: [entities/pairti-lens.md, entities/goldmark-and-markdown.md, entities/local-agent-mcp.md, topics/editor-keymap-and-modes.md, topics/viewer-verification-plan.md, topics/browser-wasm-editor.md]
 updated: 2026-11-28
 ---
 
@@ -15,7 +15,8 @@ Lens Editor is the custom, app-owned modal text editor in [[Pairti Lens]] (`inte
 - **Two primary modes**: **View** (Vim Normal mode) and **Edit** (Vim Insert mode), plus characterwise and linewise Visual selections and mouse drag selection.
 - **Dirty & conflict protection**:
   - Closing a dirty note protects the unsaved draft; `:q!` discards unsaved changes by reloading from disk.
-  - If the underlying file changes on disk while a draft is open, the writer's edits remain available until resolved.
+  - External disk writes reload a clean buffer after the write settles; if the writer has an unsaved draft, Lens surfaces the change and keeps the writer's edits available for reconciliation.
+  - On desktop, [[Local Agent MCP]] (`document` and `apply_edit`) can read unsaved buffer text/selection and apply an edit as one undo step while refusing stale edits and leaving saving to the writer.
   - In browser library mode, saving against a stale server revision (`412 Precondition Failed`) leaves the draft recoverable.
 - **Save & creation controls**: `:w`, `Cmd-S`/`Ctrl-S`, or the Save action writes directly to the local file (desktop) or served Git checkout (browser). Editing controls also support creating new notes at a chosen location and inserting structures such as tables.
 - **Caret visibility**: moving through blank lines keeps the caret visible; caret bounds are checked via canvas assertions.

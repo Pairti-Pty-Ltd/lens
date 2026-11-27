@@ -21,11 +21,12 @@ Catalog of all wiki pages for Pairti Lens.
 - [[Library and Projects]] (`entities/library-and-projects.md`) — Ordinary project folders, persisted library list, tree/tag filtering, body search, and `.pairti-reports.json` reports.
 - [[Goldmark and Markdown]] (`entities/goldmark-and-markdown.md`) — Native `.md`/`.markdown` source storage, Goldmark structural parsing, unfamiliar markup preservation, and syntax-highlighted source view.
 - [[Lens Editor]] (`entities/lens-editor.md`) — App-owned modal editor shared across Raw and Formatted views with single undo history and conflict-safe saving.
+- [[Local Agent MCP]] (`entities/local-agent-mcp.md`) — Desktop local MCP server (`document` and `apply_edit`) exposing the focused buffer and applying single-undo edits with stale-edit refusal.
 - [[Embedded Shell]] (`entities/embedded-shell.md`) — Desktop-only in-app terminal surface (`//go:build !js`) with shared focus and clipboard routing.
 
 ## Topics
 - [[Single-Compile Rendering]] (`topics/single-compile-rendering.md`) — Report ownership (`.pairti-reports.json`), project Typst templates, identical PDF preview/download, Pandoc `.docx` export, and publication checks.
-- [[Viewer Verification Plan]] (`topics/viewer-verification-plan.md`) — 11-surface verification matrix separating automated canvas assertions from recorded live-window checks.
+- [[Viewer Verification Plan]] (`topics/viewer-verification-plan.md`) — 13-surface verification matrix separating automated canvas assertions from recorded live-window checks.
 - [[Editor Keymap and Modes]] (`topics/editor-keymap-and-modes.md`) — View/Edit modes, motions, operators, text objects, Visual selections, Ex commands, and `Ctrl-W` behavior.
 - [[UI Layout and Surfaces]] (`topics/ui-layout-and-surfaces.md`) — Shared sidebar, tabs, split panes, outline rail, single-line footer, and custom GoGPU surfaces.
 - [[macOS Native Integration]] (`topics/macos-native-integration.md`) — Pure-Go AppKit menus via `goffi`, `OnUpdate` thread ownership, shortcut deduplication, Finder `Open With`, and hierarchical Reports menus.

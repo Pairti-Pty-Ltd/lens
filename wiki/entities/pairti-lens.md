@@ -2,7 +2,7 @@
 title: Pairti Lens
 type: entity
 sources: [doc:///concept.md]
-related: [entities/gogpu.md, entities/typst.md, entities/library-and-projects.md, entities/lens-editor.md, topics/single-compile-rendering.md, topics/browser-wasm-editor.md, topics/viewer-verification-plan.md]
+related: [entities/gogpu.md, entities/typst.md, entities/library-and-projects.md, entities/lens-editor.md, entities/local-agent-mcp.md, topics/single-compile-rendering.md, topics/browser-wasm-editor.md, topics/viewer-verification-plan.md]
 updated: 2026-11-28
 ---
 
