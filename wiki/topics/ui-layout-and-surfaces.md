@@ -1,9 +1,9 @@
 ---
 title: UI Layout and Surfaces
 type: topic
-sources: [doc:///build-0.md, doc:///build-1.md, doc:///viewer-plan.md, doc:///todo.md]
+sources: [doc:///build-0.md, doc:///build-1.md, doc:///viewer-plan.md, doc:///todo.md, beads]
 related: [entities/gogpu.md, entities/library-and-projects.md, entities/goldmark-and-markdown.md, topics/viewer-verification-plan.md]
-updated: 2026-11-27
+updated: 2026-11-28
 ---
 
 # UI Layout and Surfaces
@@ -30,6 +30,7 @@ updated: 2026-11-27
 ## Decisions & Tradeoffs
 - **Custom tree and split surfaces**: Replacing `gogpu/ui`'s tree and split widgets added custom surface code in `main.go`/`internal/ui` but fixed hit testing and window resize without abandoning GoGPU for Gio.
 - **No metadata clutter**: Stripping sizes, timestamps, and duplicate titles keeps navigation focused on project + title selection.
+- **Heading navigation lives in the outline rail, not tab strips** (`lens-c8t`): Section breadcrumbs and disclosure controls were removed from both document tab strips (`internal/ui/tabs.go`, `cmd/pairti-lense/main_docs.go`, and `Rail.SectionName` in `internal/ui/rail.go`). Tab strips render only open document tabs; heading navigation belongs exclusively in the right-hand Table of contents panel.
 
 ## See Also
 - [[GoGPU]]

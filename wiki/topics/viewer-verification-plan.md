@@ -1,9 +1,9 @@
 ---
 title: Viewer Verification Plan
 type: topic
-sources: [doc:///viewer-plan.md, doc:///todo.md]
+sources: [doc:///viewer-plan.md, doc:///todo.md, beads]
 related: [entities/pairti-lens.md, entities/lens-editor.md, entities/embedded-shell.md, topics/ui-layout-and-surfaces.md, topics/build-roadmap.md]
-updated: 2026-11-27
+updated: 2026-11-28
 ---
 
 # Viewer Verification Plan
@@ -35,6 +35,7 @@ The Viewer Verification Plan defines a strict release gate for [[Pairti Lens]]: 
 ## Decisions & Tradeoffs
 - **Parking the shell**: Halting [[Embedded Shell]] work prevents splitting effort while core viewer regressions (rendering, hit testing, footer height, scroll feel) remain unverified on screen.
 - **Canvas-level test assertions**: Requiring tests to inspect drawn strings, colours, and caret rects catches layout and clipping bugs that logic-only unit tests miss.
+- **macOS live-window automation permission gate** (`lens-c8t`): Automated native window checks against `Lens.app` fail when macOS screen capture and input permissions are absent (`CGPreflightScreenCaptureAccess`, `CGPreflightPostEventAccess`, and `AXIsProcessTrusted` all return `false`, producing *"Computer Use permissions are not granted"*). In headless/unprivileged runs, canvas-level `CGO_ENABLED=0 go test ./...` suites can verify rendering and rail heading navigation, while live native window sign-off requires an environment with macOS Screen Recording and Accessibility permissions granted.
 
 ## See Also
 - [[UI Layout and Surfaces]]

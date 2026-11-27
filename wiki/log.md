@@ -51,3 +51,10 @@ Wiki-worthy: `lens-77q` (browser-vs-desktop capability boundary in `startup_js.g
 Skipped: `lens-zwz`, `lens-xze` (routine MIT release verification and GitHub publication cutover).
 Updated: `wiki/topics/browser-wasm-editor.md`, `wiki/topics/single-compile-rendering.md`, `wiki/index.md`.
 Git evidence used: `a348e51`, `d13f20c`, `6b08edc`.
+
+
+## [2026-11-28T10:30:00+11:00] learn
+Reviewed 1 bead (`lens-c8t`).
+Wiki-worthy: `lens-c8t` (removed section breadcrumbs and disclosure controls from both document tab strips so heading navigation lives exclusively in the right-hand Table of contents rail; documented macOS live-window verification blocker when `CGPreflightScreenCaptureAccess`, `CGPreflightPostEventAccess`, and `AXIsProcessTrusted` are false).
+Updated: `wiki/topics/ui-layout-and-surfaces.md`, `wiki/topics/viewer-verification-plan.md`.
+Git evidence used: `35b3dec` (`cmd/pairti-lense/main_docs.go`, `internal/ui/rail.go`, `internal/ui/tabs.go`).
