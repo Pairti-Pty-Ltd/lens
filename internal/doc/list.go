@@ -94,24 +94,23 @@ func readDir(dir, projectRoot string, list List, show, sniff int) ([]DirEntry, e
 		}
 		dirs = kept
 	}
-	if !list.ShowIgnored {
-		dirs = dropIgnored(projectRoot, dirs)
-		files = dropIgnored(projectRoot, files)
-	}
 	sort.Slice(dirs, func(i, j int) bool {
 		return strings.ToLower(dirs[i].Name) < strings.ToLower(dirs[j].Name)
 	})
 	sort.Slice(files, func(i, j int) bool {
 		return strings.ToLower(files[i].Name) < strings.ToLower(files[j].Name)
 	})
-	if md := markdownCount(files); md > 0 && md <= sniff {
-		for i := range files {
-			if IsMarkdown(files[i].Name) {
-				files[i].Title = SniffTitle(files[i].Abs, files[i].Name)
+	out := append(dirs, files...)
+	if !list.ShowIgnored {
+		out = dropIgnored(projectRoot, out)
+	}
+	if md := markdownCount(out); md > 0 && md <= sniff {
+		for i, e := range out {
+			if !e.IsDir && IsMarkdown(e.Name) {
+				out[i].Title = SniffTitle(e.Abs, e.Name)
 			}
 		}
 	}
-	out := append(dirs, files...)
 	if len(out) > show {
 		extra := len(out) - show
 		out = append(out[:show], DirEntry{
@@ -123,10 +122,10 @@ func readDir(dir, projectRoot string, list List, show, sniff int) ([]DirEntry, e
 	return out, nil
 }
 
-func markdownCount(files []DirEntry) int {
+func markdownCount(entries []DirEntry) int {
 	n := 0
-	for _, f := range files {
-		if IsMarkdown(f.Name) {
+	for _, f := range entries {
+		if !f.IsDir && IsMarkdown(f.Name) {
 			n++
 		}
 	}

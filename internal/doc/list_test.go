@@ -97,18 +97,27 @@ func TestReadDirFiltersDotAndIgnored(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write(filepath.Join(root, ".gitignore"), "skip.md\n")
+	for _, dir := range []string{"notes.md", "archive"} {
+		if err := os.Mkdir(filepath.Join(root, dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		write(filepath.Join(root, dir, "note.md"), "# Note\n")
+	}
+	write(filepath.Join(root, ".gitignore"), "skip.md\narchive/\n")
 	write(filepath.Join(root, "visible.md"), "# Visible\n")
 	write(filepath.Join(root, "skip.md"), "# Skip\n")
 	write(filepath.Join(root, ".secret.md"), "# Secret\n")
 	write(filepath.Join(root, ".beads", "note.md"), "# Bead\n")
 
-	hidden, err := ReadDir(root, root, List{})
+	hidden, err := readDir(root, root, List{}, 10, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if names := entryNames(hidden); len(names) != 1 || names[0] != "visible.md" {
+	if names := entryNames(hidden); len(names) != 2 || names[0] != "notes.md" || names[1] != "visible.md" {
 		t.Fatalf("hidden = %v", names)
+	}
+	if hidden[0].Title != "notes.md" || hidden[1].Title != "Visible" {
+		t.Fatalf("titles = %+v", hidden)
 	}
 	dots, err := ReadDir(root, root, List{ShowDot: true})
 	if err != nil {
