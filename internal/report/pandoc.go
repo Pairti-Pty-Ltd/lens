@@ -29,7 +29,7 @@ var pandocAssets = map[string]struct {
 var pandocMu sync.Mutex
 
 // PandocBin is the pinned Pandoc. A copy already in the versioned config
-// directory is used. Otherwise the 3.14 release is downloaded. PATH and the
+// directory or app bundle is used. Otherwise the 3.14 release is downloaded. PATH and the
 // usual Homebrew locations are used only when that download fails.
 func PandocBin() (string, error) {
 	if p, err := pinnedPandoc(); err == nil {
@@ -54,6 +54,9 @@ func PandocBin() (string, error) {
 }
 
 func pinnedPandoc() (string, error) {
+	if p, err := locateTool(pandocName(), executableDirs(true), nil); err == nil {
+		return p, nil
+	}
 	dir, err := pandocDir()
 	if err != nil {
 		return "", err
@@ -89,25 +92,31 @@ func pandocFallbacks() []string {
 }
 
 func fetchPinnedPandoc(ctx context.Context) (string, error) {
-	key := runtime.GOOS + "/" + runtime.GOARCH
-	asset, ok := pandocAssets[key]
-	if !ok {
-		return "", os.ErrNotExist
-	}
 	dir, err := pandocDir()
 	if err != nil {
 		return "", err
 	}
-	url := "https://github.com/jgm/pandoc/releases/download/" + pandocVersion + "/" + asset.file
+	spec, err := pandocSpec()
+	if err != nil {
+		return "", err
+	}
+	spec.Dest = dir
 	SetTransfer("Downloading Pandoc " + pandocVersion)
-	got, err := fetchBinary(ctx, archiveSpec{
-		URL: url, SHA: asset.sha, File: asset.file, Dest: dir,
-		Label: "pandoc", Version: pandocVersion, Names: []string{"pandoc", "pandoc.exe"},
-	})
+	got, err := fetchBinary(ctx, spec)
 	if err != nil {
 		SetTransfer(firstLine(err.Error()))
 		return "", err
 	}
 	SetTransfer("")
 	return got, nil
+}
+
+func pandocSpec() (archiveSpec, error) {
+	key := runtime.GOOS + "/" + runtime.GOARCH
+	asset, ok := pandocAssets[key]
+	if !ok {
+		return archiveSpec{}, os.ErrNotExist
+	}
+	return archiveSpec{URL: "https://github.com/jgm/pandoc/releases/download/" + pandocVersion + "/" + asset.file,
+		SHA: asset.sha, File: asset.file, Label: "pandoc", Version: pandocVersion, Names: []string{pandocName()}, Bin: pandocName()}, nil
 }

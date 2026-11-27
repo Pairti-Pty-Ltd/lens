@@ -59,6 +59,17 @@ app: binary $(ICON_ICNS)
 	cp $(BUILD)/$(BINARY) "$(APP)/Contents/MacOS/$(BINARY)"
 	cp $(ICON_ICNS) "$(APP)/Contents/Resources/AppIcon.icns"
 	cp -f doc/editor-keymap.md "$(APP)/Contents/Resources/editor-keymap.md"
+	@mkdir -p "$(APP)/Contents/Resources/licenses"
+	cp -f cmd/lens-bundle-tools/licenses/* "$(APP)/Contents/Resources/licenses/"
+	CGO_ENABLED=0 go run ./cmd/lens-bundle-tools "$(APP)/Contents"
+	@set -e; for tool in typst pandoc pdftoppm; do \
+		bin="$(APP)/Contents/MacOS/$$tool"; \
+		case "$$(go env GOARCH)" in arm64) cpu=arm64;; amd64) cpu=x86_64;; *) exit 1;; esac; \
+		lipo -verify_arch "$$cpu" "$$bin"; \
+		deps=$$(otool -L "$$bin"); \
+		printf '%s\n' "$$deps" | awk 'NR > 1 && $$1 !~ /^\/(usr\/lib|System\/Library)\// { print "external dependency:", $$0; exit 1 }'; \
+		codesign --force --sign - "$$bin"; \
+	done
 	@printf '%s\n' \
 		'<?xml version="1.0" encoding="UTF-8"?>' \
 		'<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
@@ -80,6 +91,7 @@ app: binary $(ICON_ICNS)
 		> "$(APP)/Contents/Info.plist"
 	plutil -lint "$(APP)/Contents/Info.plist"
 	codesign --force --sign - "$(APP)"
+	codesign --verify --strict --deep "$(APP)"
 	@mkdir -p "$(HOME)/Applications"
 	rm -rf "$(DEST)"
 	cp -R "$(APP)" "$(DEST)"

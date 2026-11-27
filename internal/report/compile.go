@@ -223,7 +223,7 @@ func inputFields(j Job) []struct{ k, v string } {
 }
 
 func raster(pdf, dir string) ([]string, error) {
-	bin, err := exec.LookPath("pdftoppm")
+	bin, err := locateTool("pdftoppm", executableDirs(true), exec.LookPath)
 	if err != nil {
 		return nil, fmt.Errorf("pdftoppm not installed")
 	}
