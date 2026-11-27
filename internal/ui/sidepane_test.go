@@ -19,6 +19,16 @@ func TestModeBarSelectsHistory(t *testing.T) {
 	}
 }
 
+func TestMenuSelectionUpdatesSidebarModeBar(t *testing.T) {
+	pane := NewSidePane(nil, nil, nil)
+	bar := NewModeBar(pane.SetMode)
+	pane.SetBar(bar)
+	pane.SetMode(SideHistory)
+	if bar.mode != SideHistory {
+		t.Fatalf("history menu selected sidebar mode %d", bar.mode)
+	}
+}
+
 func TestSidePanePutsTheModeSwitchAboveTheControls(t *testing.T) {
 	field := NewNarrow(textfield.New(textfield.Placeholder("Search")))
 	actions := NewProjectActions(nil)

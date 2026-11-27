@@ -20,10 +20,20 @@ summary:hover,details[open]>summary,button:hover:enabled {background:#383838}
 main {position:relative; flex:1; min-height:0}
 main canvas {position:absolute; inset:0; width:100% !important; height:100% !important}
 #paint {pointer-events:none}
+#publication {padding:0; border:1px solid #454545; background:#181818; color:inherit}
+#publication::backdrop {background:#000a}
+#publication header {padding:6px 10px; gap:12px}
+#publication a {color:#9bcaff}
+#publication iframe {display:block; border:0; width:min(90vw,1000px); height:78vh}
+#publication iframe[hidden] {display:none}
 </style>
 <header><nav aria-label="Lens menus"></nav><span id="status" role="status">Loading Lens…</span></header>
 <input id="file" type="file" accept=".md,.markdown,text/markdown" hidden>
 <main><canvas tabindex="0" aria-label="Lens workspace"></canvas><canvas id="paint" aria-hidden="true"></canvas></main>
+<dialog id="publication" aria-labelledby="publication-name">
+  <header><strong id="publication-name"></strong><a id="publication-download">Download</a><button type="button" id="publication-close">Close</button></header>
+  <iframe hidden title="Exported report PDF"></iframe>
+</dialog>
 <script src="wasm_exec.js"></script>
 <script>
 window.libraryMode = location.pathname === '/library/';
@@ -74,6 +84,38 @@ async function writeMarkdown(path, text) {
     showError(error.message);
     throw error;
   } finally { writing.delete(path); }
+}
+const publication = document.querySelector('#publication');
+const reportDownload = document.querySelector('#publication-download');
+const reportPreview = publication.querySelector('iframe');
+let exportingReport = false;
+document.querySelector('#publication-close').onclick = () => publication.close();
+publication.onclose = () => {
+  reportPreview.removeAttribute('src');
+  URL.revokeObjectURL(reportDownload.href);
+  reportDownload.removeAttribute('href');
+  canvas.focus();
+};
+async function exportReport(id, name, output) {
+  if (exportingReport) return;
+  exportingReport = true;
+  statusLine.textContent = 'Exporting ' + name + '…';
+  try {
+    const response = await checked('/api/report/export?' + new URLSearchParams({report:id, output}), {method:'POST'});
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const pdf = blob.type === 'application/pdf';
+    reportDownload.href = url;
+    reportDownload.download = name + (pdf ? '.pdf' : '.docx');
+    reportDownload.textContent = pdf ? 'Download PDF' : 'Download Word document';
+    document.querySelector('#publication-name').textContent = name;
+    reportPreview.hidden = !pdf;
+    if (pdf) reportPreview.src = url;
+    publication.showModal();
+    statusLine.textContent = '';
+  } catch (error) {
+    showError(error.message);
+  } finally { exportingReport = false; }
 }
 picker.onchange = async () => {
   const file = picker.files[0];
@@ -147,6 +189,12 @@ async function start() {
   setDocuments(names);
   installMenus();
   statusLine.textContent = libraryMode ? (names.length?'':'No tracked Markdown files.') : 'Use File → Import Markdown to open a note.';
+  if (libraryMode) {
+    try {
+      const catalog = await (await checked('/api/reports')).text();
+      if (!setReportCatalog(catalog)) throw Error('Invalid report catalogue.');
+    } catch (error) { showError('Reports unavailable. ' + error.message); }
+  }
   await running;
   showError('Lens stopped. Reload to restart.');
 }

@@ -10,9 +10,11 @@ import (
 	"image/png"
 	_ "image/png"
 	"io"
+	"io/fs"
 	"math"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -30,7 +32,11 @@ func Body(src []byte) string {
 // writeBody is the Typst note. Local images are copied into work when base
 // is the directory those relative paths start from.
 func writeBody(work, base string, src []byte) string {
-	t := &typer{work: work, base: base, seen: map[string]string{}}
+	return renderBody(work, base, src, false)
+}
+
+func renderBody(work, base string, src []byte, librarySnapshot bool) string {
+	t := &typer{work: work, base: base, librarySnapshot: librarySnapshot, seen: map[string]string{}}
 	blocks := doc.Blocks(src)
 	for i := 0; i < len(blocks); i++ {
 		bl := blocks[i]
@@ -60,6 +66,10 @@ func writeBody(work, base string, src []byte) string {
 					t.b.WriteString("\n\n")
 					break
 				}
+			}
+			if librarySnapshot {
+				fmt.Fprintf(&t.b, "#raw(\"%s\", block: true, lang: \"%s\")\n\n", typstStr(bl.Text), typstStr(bl.Marker))
+				break
 			}
 			fence := strings.Repeat("`", fenceLen(bl.Text)+1)
 			t.b.WriteString(fence)
@@ -100,11 +110,12 @@ func writeBody(work, base string, src []byte) string {
 }
 
 type typer struct {
-	b          strings.Builder
-	work, base string
-	n          int
-	diagrams   int
-	seen       map[string]string
+	librarySnapshot bool
+	b               strings.Builder
+	work, base      string
+	n               int
+	diagrams        int
+	seen            map[string]string
 }
 
 func (t *typer) diagram(source string) string {
@@ -167,7 +178,11 @@ func (t *typer) inline(spans []doc.Span, plain string) string {
 		}
 		switch {
 		case sp.Code:
-			text = "`" + strings.ReplaceAll(sp.Text, "`", "\\`") + "`"
+			if t.librarySnapshot {
+				text = "#raw(\"" + typstStr(sp.Text) + "\")"
+			} else {
+				text = "`" + strings.ReplaceAll(sp.Text, "`", "\\`") + "`"
+			}
 		case sp.Bold && sp.Italic:
 			text = "#strong[#emph[" + text + "]]"
 		case sp.Bold:
@@ -179,7 +194,7 @@ func (t *typer) inline(spans []doc.Span, plain string) string {
 			text = "#strike[" + text + "]"
 		}
 		if sp.Link != "" && !sp.Image {
-			text = "#link(\"" + escape(sp.Link) + "\")[" + text + "]"
+			text = "#link(\"" + typstStr(sp.Link) + "\")[" + text + "]"
 		}
 		b.WriteString(text)
 	}
@@ -187,7 +202,7 @@ func (t *typer) inline(spans []doc.Span, plain string) string {
 }
 
 func (t *typer) image(sp doc.Span) string {
-	abs := resolveImage(t.base, sp.Link)
+	abs := reportImage(t.base, sp.Link, t.librarySnapshot)
 	if abs == "" || t.work == "" {
 		label := strings.TrimSpace(sp.Text)
 		if label == "" {
@@ -259,6 +274,36 @@ func diagramWidth(path string) string {
 		scale = 1
 	}
 	return fmt.Sprintf("%.1fmm", wm*scale)
+}
+
+// SnapshotImagePath accepts only library-relative raster image paths. Decode
+// before checking the path: the native image resolver also decodes URLs.
+func SnapshotImagePath(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "" || u.Host != "" || u.Opaque != "" || strings.ContainsAny(u.Path, "\\:\x00") {
+		return ""
+	}
+	name := path.Clean(u.Path)
+	if !fs.ValidPath(name) || !filepath.IsLocal(filepath.FromSlash(name)) {
+		return ""
+	}
+	switch strings.ToLower(path.Ext(name)) {
+	case ".png", ".jpg", ".jpeg", ".gif":
+		return name
+	default:
+		return ""
+	}
+}
+
+func reportImage(base, raw string, snapshot bool) string {
+	if !snapshot {
+		return resolveImage(base, raw)
+	}
+	// The server alone populates base, using regular files, with no symlinks.
+	if name := SnapshotImagePath(raw); base != "" && name != "" {
+		return existingFile(filepath.Join(base, filepath.FromSlash(name)))
+	}
+	return ""
 }
 
 func resolveImage(base, raw string) string {
@@ -595,7 +640,7 @@ func fenceCloses(row string, mark byte, count, indent int) bool {
 // stageMarkdownImages copies local pictures next to the note Pandoc reads
 // and rewrites the links to those copies. Pandoc does not search the note's
 // own folder once the markdown has been moved into a temp directory.
-func stageMarkdownImages(work, base string, src []byte) []byte {
+func stageMarkdownImages(work, base string, src []byte, snapshot bool) []byte {
 	text := string(src)
 	seen := map[string]string{}
 	var links []string
@@ -612,7 +657,7 @@ func stageMarkdownImages(work, base string, src []byte) []byte {
 	sort.Slice(links, func(i, j int) bool { return len(links[i]) > len(links[j]) })
 	n := 0
 	for _, link := range links {
-		abs := resolveImage(base, link)
+		abs := reportImage(base, link, snapshot)
 		if abs == "" {
 			continue
 		}

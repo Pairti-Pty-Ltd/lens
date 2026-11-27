@@ -73,6 +73,9 @@ func (p *SidePane) SetMode(mode int) {
 		return
 	}
 	p.mode = mode
+	if bar, ok := p.bar.(*ModeBar); ok {
+		bar.SetMode(mode)
+	}
 	if mode != SideReports && p.reports != nil {
 		p.reports.CloseMenu()
 	}

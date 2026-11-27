@@ -15,15 +15,17 @@ import (
 // An empty Target is taken from a Brand suffix such as "studio.docx".
 // An empty Dir writes a temporary directory.
 type ExportRequest struct {
-	Root   string
-	Src    []byte
-	Name   string
-	Brand  string
-	Target string
-	Dir    string
-	Bin    string
-	Pandoc string
-	Base   string
+	// LibrarySnapshot confines rendering to staged report inputs and uses only installed tools.
+	LibrarySnapshot bool
+	Root            string
+	Src             []byte
+	Name            string
+	Brand           string
+	Target          string
+	Dir             string
+	Bin             string
+	Pandoc          string
+	Base            string
 }
 
 // Export compiles the note with a brand template and writes Dir/Name.pdf.
@@ -32,6 +34,23 @@ func Export(req ExportRequest) (Result, error) {
 	b, err := loadBrand(brand)
 	if err != nil {
 		return Result{}, err
+	}
+	if req.LibrarySnapshot {
+		if target == "docx" {
+			req.Pandoc, err = pinnedPandoc()
+			if err != nil {
+				req.Pandoc, err = exec.LookPath("pandoc")
+			}
+		} else {
+			req.Bin, err = locateTypst(bundledDirs(), exec.LookPath)
+		}
+		if err != nil {
+			tool := "typst"
+			if target == "docx" {
+				tool = "pandoc"
+			}
+			return Result{}, &NotInstalledError{Name: tool}
+		}
 	}
 	req.Brand = b.ID
 	req.Target = target
@@ -69,8 +88,9 @@ func Export(req ExportRequest) (Result, error) {
 	return CompileJob(Job{
 		Root: req.Root, Src: req.Src, Bin: req.Bin, Base: base,
 		Title: title, Author: author, Date: date, Template: b.ID,
-		Out:   filepath.Join(dir, name+".pdf"),
-		brand: &b,
+		Out:             filepath.Join(dir, name+".pdf"),
+		brand:           &b,
+		librarySnapshot: req.LibrarySnapshot,
 		Inputs: map[string]string{
 			"subtitle": meta["subtitle"], "client": meta["client"], "project": meta["project"],
 			"licence": licence, "disclosure": meta["disclosure"],

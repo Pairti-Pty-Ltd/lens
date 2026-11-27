@@ -249,6 +249,10 @@ func (s *shell) runCmd(cmd string) {
 }
 
 func (s *shell) useTemplate(name string) {
+	if s.remote != nil {
+		s.showMessage("Choose a saved report and its template in Reports → Export Report.")
+		return
+	}
 	root := s.projectRoot()
 	if root == "" {
 		if s.line3 != nil {

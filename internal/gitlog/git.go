@@ -45,11 +45,22 @@ func Log(dir, rel string, n int) ([]Commit, error) {
 	if n < 1 {
 		n = 1
 	}
-	args := []string{"--literal-pathspecs", "log", "-n", fmt.Sprint(n), "--date=format:%d %b", "--pretty=format:%H%x1f%ad%x1f%s"}
+	var paths []string
 	if rel != "" {
-		args = append(args, "--", rel)
+		paths = []string{rel}
 	}
-	out, err := git(dir, args...)
+	return LogPaths(context.Background(), dir, paths, 0, n)
+}
+
+// LogPaths lists a page for literal paths under the repository.
+func LogPaths(parent context.Context, dir string, paths []string, skip, n int) ([]Commit, error) {
+	ctx, cancel := context.WithTimeout(parent, 8*time.Second)
+	defer cancel()
+	args := []string{"--literal-pathspecs", "log", "-n", fmt.Sprint(n), "--skip=" + fmt.Sprint(skip), "--date=format:%d %b", "--pretty=format:%H%x1f%ad%x1f%s", "--"}
+	out, over, err := compareGit(ctx, dir, "", 4<<20, append(args, paths...)...)
+	if over {
+		return nil, errors.New("commit list is too large")
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +80,18 @@ func Log(dir, rel string, n int) ([]Commit, error) {
 
 // Files are the paths touched by hash.
 func Files(dir, hash string) ([]string, error) {
-	out, err := git(dir, "show", "--format=", "--root", "--diff-merges=first-parent", "--find-renames", "--name-only", "-z", hash)
+	return FilesPaths(context.Background(), dir, hash, nil)
+}
+
+// FilesPaths lists changed files within the supplied literal pathspecs.
+func FilesPaths(parent context.Context, dir, hash string, paths []string) ([]string, error) {
+	ctx, cancel := context.WithTimeout(parent, 8*time.Second)
+	defer cancel()
+	args := []string{"--literal-pathspecs", "show", "--format=", "--no-notes", "--root", "--diff-merges=first-parent", "--find-renames", "--name-only", "-z", hash, "--"}
+	out, over, err := compareGit(ctx, dir, "", 4<<20, append(args, paths...)...)
+	if over {
+		return nil, errors.New("changed file list is too large")
+	}
 	if err != nil {
 		return nil, err
 	}

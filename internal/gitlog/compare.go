@@ -56,13 +56,25 @@ func Compare(dir, hash, rel string) (Comparison, error) {
 }
 
 func CompareContext(parent context.Context, dir, hash, rel string) (Comparison, error) {
+	return compareContext(parent, dir, hash, rel, nil)
+}
+
+// ComparePaths restricts both sides of rename detection to the supplied
+// literal paths. The library server passes only currently served documents.
+func ComparePaths(parent context.Context, dir, hash string, paths []string) (Comparison, error) {
+	if len(paths) == 0 {
+		return Comparison{Notice: "No document changes."}, nil
+	}
+	return compareContext(parent, dir, hash, "", paths)
+}
+
+func compareContext(parent context.Context, dir, hash, rel string, paths []string) (Comparison, error) {
 	ctx, cancel := context.WithTimeout(parent, 20*time.Second)
 	defer cancel()
 	args := []string{"--literal-pathspecs", "-c", "diff.suppressBlankEmpty=false", "show", "--format=", "--no-notes", "--root", "--diff-merges=first-parent", "--find-renames", "--no-ext-diff", "--no-textconv", "--no-color", "--no-abbrev", "--raw", "-z"}
 	if strings.HasPrefix(hash, "-") || hash == "" {
 		return Comparison{}, errors.New("invalid commit")
 	}
-	var paths []string
 	if rel != "" {
 		// Path filtering before rename detection would turn a rename into an add.
 		out, over, err := compareGit(ctx, dir, "", 4<<20, append(args, hash, "--")...)

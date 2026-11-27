@@ -43,3 +43,11 @@ Skipped: `lens-8hn` (routine public fixture and internal config sanitization).
 Created: `wiki/topics/report-brand-packs.md`.
 Updated: `wiki/topics/browser-wasm-editor.md`, `wiki/entities/gogpu.md`, `wiki/topics/single-compile-rendering.md`, `wiki/index.md`.
 Git evidence used: `203ebda`, `9a0513e`, `0fd28a9`, `7654874`.
+
+
+## [2026-11-28T10:01:00+11:00] learn
+Reviewed 5 beads (`lens-zwz`, `lens-xze`, `lens-77q`, `lens-77q.1`, `lens-77q.2`).
+Wiki-worthy: `lens-77q` (browser-vs-desktop capability boundary in `startup_js.go`/`main.go`, async browser clipboard vs. synchronous widget callbacks, and remaining host-only facilities), `lens-77q.1` (read-only tracked Markdown history/diff routes `/api/history/{log,files,diff}` with `merge-base --is-ancestor` validation and off-thread `libraryHistory` client), `lens-77q.2` (confined server-side report export `POST /api/report/export` using saved tracked files only, Pandoc `--sandbox` + `snapshot-media.lua` mediabag pre-population, and single-blob PDF preview/download).
+Skipped: `lens-zwz`, `lens-xze` (routine MIT release verification and GitHub publication cutover).
+Updated: `wiki/topics/browser-wasm-editor.md`, `wiki/topics/single-compile-rendering.md`, `wiki/index.md`.
+Git evidence used: `a348e51`, `d13f20c`, `6b08edc`.

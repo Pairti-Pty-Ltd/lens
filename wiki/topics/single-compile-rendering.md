@@ -2,7 +2,7 @@
 title: Single-Compile Rendering
 type: topic
 sources: [doc:///concept.md, doc:///export-plan.md, doc:///viewer-plan.md, doc:///todo.md, beads]
-related: [entities/typst.md, entities/lens-toml.md, entities/pairti-lens.md, topics/build-roadmap.md, topics/report-brand-packs.md]
+related: [entities/typst.md, entities/lens-toml.md, entities/pairti-lens.md, topics/build-roadmap.md, topics/report-brand-packs.md, topics/browser-wasm-editor.md]
 updated: 2026-11-28
 ---
 
@@ -32,9 +32,11 @@ Single-compile rendering is the core architectural guarantee of [[Pairti Lens]]:
 - **Why Word and HTML are deferred**: Typst's HTML export is experimental and reflows in browsers; Word has no Typst target. Both are deferred and explicitly labelled as separate output files that do not share the PDF's pixels.
 - **One active template per project**: Multi-profile export configurations (as in Zettlr) are deferred until single-template compile and swap are proven.
 - **Externalized report brand packs (`lens-c9n`)**: Branded PDF and Pandoc `.docx` exports load versioned user-installed packs from `os.UserConfigDir()/pairti-lense/brands/<id>/` rather than embedding private assets in the binary, with a built-in neutral `default` brand on clean installations. See [[Report Brand Packs]].
+- **Browser library server-side publishing (`lens-77q.2`)**: `cmd/lens-library` (`POST /api/report/export`) reuses `internal/report` on saved tracked files inside a confined per-job directory (`LibrarySnapshot`), serving one PDF blob to both the browser `<dialog>` `<iframe>` preview and download link, and running Pandoc with `--sandbox` + `snapshot-media.lua` for `.docx` exports. See [[Browser WASM Editor]].
 
 ## See Also
 - [[Typst]]
 - [[lens.toml]]
 - [[Build Roadmap]]
 - [[Report Brand Packs]]
+- [[Browser WASM Editor]]

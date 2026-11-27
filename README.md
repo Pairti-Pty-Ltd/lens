@@ -2,7 +2,7 @@
 
 ## Motivation
 
-Oh no, not another Markdown viewer and editor. I keep the work as projects in Git, with several folders open at once, and I want a compiled Typst report whose preview is the PDF I export. After years with Electron editors I wanted a fast app in Go, drawn on the GPU in a native OS window. Lens takes its lead from Zettlr.
+Oh no, not another Markdown viewer and editor. I keep the work as projects in Git, with several folders open at once, and I want a compiled Typst report, with a preview of the PDF pages. After years with Electron editors I wanted a fast app in Go, drawn on the GPU in a native OS window. Lens takes its lead from Zettlr.
 
 A desktop Markdown editor for notes and reports kept in Git repositories.
 
@@ -10,17 +10,17 @@ A desktop Markdown editor for notes and reports kept in Git repositories.
 
 ## Why Lens
 
-Lens keeps several project folders open in one library. Reports compile through a Typst template, and the preview shows the same PDF that export writes. The app is a small Go program that opens a native OS window and draws it on the GPU with GoGPU. It does not use Electron or a web view.
+Lens keeps several project folders open in one library. Reports compile through a Typst template. The preview shows the pages of that PDF. The app is a small Go program that opens a native OS window and draws it on the GPU with GoGPU. It does not use Electron or a web view.
 
 A local MCP connection lets an assistant on the same machine read and edit the focused note.
 
 ## Features
 
 - Project library. Several folders stay open in one window
-- The file tree lists one folder at a time and leaves generated trees such as `node_modules` and `.git` closed. Gitignored names are hidden by default, and a large folder is capped.
+- The file tree lists one folder at a time and does not open generated trees such as `node_modules` and `.git`. Gitignored names are hidden by default, and a large folder is capped.
 - Markdown editing with an outline
 - Git history for a document or its project
-- Typst PDF export, with a preview of the exported pages
+- Typst PDF preview and export
 - Pandoc export to `.docx`
 - A lexical search index over open projects
 - File watching with reloads after writes settle
@@ -80,7 +80,9 @@ Expand **Library** in the Files sidebar and click a tracked Markdown file. Use t
 
 If two writers open the same revision, the first save succeeds. The second writer sees a conflict and keeps their edits. **File → Download Markdown** keeps a local copy of the draft. Close the tab with **File → Close Tab**, confirm the discard, then reopen the file from the sidebar to load the server revision. Changes already on disk from an external editor or Git operation also invalidate the old revision. Coordinate Git operations with saves: external processes do not share the server's write lock.
 
-Run one Lens server per checkout. It listens on loopback; use SSH accounts with forwarding access for trusted writers. Anyone with access to this port can read and edit the whole exposed library. The server exposes tracked regular UTF-8 Markdown files up to 1 MiB. Untracked documents, symlinks and unresolved index conflicts are excluded. Desktop and WASM both build `./cmd/pairti-lense`. They share the Go shell, project tree, search, tabs, document toolbar, Raw and Formatted editors, split panes, outline, footer and menu command definitions. The browser launcher renders the menu bar and supplies HTTP or import/download storage. Git history, report publishing, the terminal, system file actions, relative image assets and per-document permissions still need browser or server support.
+Run one Lens server per checkout. It listens on loopback; use SSH accounts with forwarding access for trusted writers. Anyone with access to this port can read and edit the whole exposed library. The server exposes tracked regular UTF-8 Markdown files up to 1 MiB. Untracked documents, symlinks and unresolved index conflicts are excluded. Desktop and WASM both build `./cmd/pairti-lense`. They share the Go shell, project tree, search, tabs, document toolbar, Raw and Formatted editors, split panes, outline, footer and menu command definitions. The browser launcher renders the menu bar and supplies HTTP or import/download storage. Go → History shows the history of the current Markdown file or all currently served Markdown paths on the checked-out branch. Select a commit or changed file to open its read-only diff.
+
+In library mode, choose a saved report under **Reports → Open Report**, then **Reports → Export Report…**. Select a server-installed template and output format. PDF opens in a preview with a download of the same file. Word downloads as DOCX. Exports read saved files from the checkout in report order, so save any edits you want included. The terminal, system file actions, editor loading of relative image assets and per-document permissions still need browser or server support.
 
 ## Status
 

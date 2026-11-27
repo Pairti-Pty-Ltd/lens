@@ -3,6 +3,7 @@
 package main
 
 import (
+	"encoding/json"
 	"path"
 	"sort"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"pairti-lense/internal/edit"
 	"pairti-lense/internal/index"
 	"pairti-lense/internal/library"
+	"pairti-lense/internal/project"
 	"pairti-lense/internal/theme"
 	"pairti-lense/internal/ui"
 )
@@ -38,7 +40,11 @@ func main() {
 		reportRoot: webRoot,
 		remote:     &browserFiles{},
 	}
-	s.lib.OpenRaw = !page.Get("libraryMode").Bool()
+	libraryMode := page.Get("libraryMode").Bool()
+	s.lib.OpenRaw = !libraryMode
+	if libraryMode {
+		s.remote.history = &libraryHistory{base: page.Get("location").Get("origin").String(), pending: make(chan func(), 8)}
+	}
 	host := gogpu.NewApp(gogpu.DefaultConfig().WithTitle("Lens"))
 	window := app.New(app.WithWindowProvider(host), app.WithPlatformProvider(host), app.WithEventSource(host.EventSource()), app.WithTheme(material3.NewDark(widget.Hex(look.Accent)).AsTheme()))
 	s.wake = host.RequestRedraw
@@ -85,6 +91,21 @@ func main() {
 	expose := func(name string, fn func([]js.Value) any) {
 		page.Set(name, js.FuncOf(func(_ js.Value, args []js.Value) any { return fn(args) }))
 	}
+	expose("setReportCatalog", func(a []js.Value) any {
+		var catalog struct {
+			Book    project.Book
+			Outputs []ui.ExportFormat
+		}
+		if err := json.Unmarshal([]byte(a[0].String()), &catalog); err != nil {
+			return false
+		}
+		s.book = catalog.Book
+		s.remote.formats = catalog.Outputs
+		s.remote.export = func(id, name, output string) { page.Call("exportReport", id, name, output) }
+		s.refresh()
+		host.RequestRedraw()
+		return true
+	})
 	expose("setDocuments", func(a []js.Value) any {
 		names = nil
 		for i := 0; i < a[0].Length(); i++ {
@@ -123,13 +144,13 @@ func main() {
 	expose("menuItems", func([]js.Value) any {
 		var items []any
 		for _, c := range s.menuCommands() {
-			items = append(items, map[string]any{"group": c.group, "title": c.title, "enabled": browserCommand(c) && (c.enabled == nil || c.enabled()), "checked": c.checked != nil && c.checked()})
+			items = append(items, map[string]any{"group": c.group, "title": c.title, "enabled": s.browserCommand(c) && (c.enabled == nil || c.enabled()), "checked": c.checked != nil && c.checked()})
 		}
 		return items
 	})
 	expose("invokeMenu", func(a []js.Value) any {
 		for _, c := range s.menuCommands() {
-			if c.group == a[0].String() && c.title == a[1].String() && browserCommand(c) {
+			if c.group == a[0].String() && c.title == a[1].String() && s.browserCommand(c) {
 				c.invoke()
 				host.RequestRedraw()
 				break
@@ -155,7 +176,10 @@ func browserResult(promise js.Value, done func(js.Value), failed func(string)) {
 	promise.Call("then", ok, bad)
 }
 
-func browserCommand(c menuCommand) bool {
+func (s *shell) browserCommand(c menuCommand) bool {
+	if c.group == "Reports" || strings.HasPrefix(c.group, "Reports\x00") {
+		return s.remote.export != nil && (c.title == "Export Report…" || strings.HasPrefix(c.group, "Reports\x00Open Report\x00"))
+	}
 	switch c.group {
 	case "File":
 		return c.title == "Save" || c.title == "Close Tab"
@@ -164,7 +188,7 @@ func browserCommand(c menuCommand) bool {
 	case "Edit":
 		return c.title != "Cut" && c.title != "Copy" && c.title != "Paste"
 	case "Go":
-		return c.title != "History"
+		return c.title != "History" || s.remote.history != nil
 	}
 	return false
 }

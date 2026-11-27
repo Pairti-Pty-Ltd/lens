@@ -52,6 +52,8 @@ type ExportChoice struct {
 // format row is pressed. A click outside, or Escape, dismisses it.
 // Project settings list the export order. The template menu stays closed.
 type ExportSheet struct {
+	downloadOnly bool
+
 	widget.WidgetBase
 	theme       theme.Theme
 	formats     []ExportFormat
@@ -93,6 +95,9 @@ func NewExportSheet(commit func(ExportChoice)) *ExportSheet {
 	e.SetEnabled(true)
 	return e
 }
+
+// SetDownloadOnly hides desktop destination controls when the browser delivers the file.
+func (e *ExportSheet) SetDownloadOnly(on bool) { e.downloadOnly = on }
 
 // SetTheme replaces the semantic theme.
 func (e *ExportSheet) SetTheme(t theme.Theme) {
@@ -358,11 +363,15 @@ func (e *ExportSheet) rows(at geometry.Point) (geometry.Rect, []exportHit) {
 		}
 	}
 	y += 10
-	add("temp", exportItem)
-	add("current", exportItem)
-	add("pick", exportItem)
-	y += 8
-	add("open", exportItem)
+	if e.downloadOnly {
+		add("saved-files", exportItem)
+	} else {
+		add("temp", exportItem)
+		add("current", exportItem)
+		add("pick", exportItem)
+		y += 8
+		add("open", exportItem)
+	}
 	y += 12
 	add("go", exportGo)
 	y += exportPad
@@ -505,6 +514,8 @@ func (e *ExportSheet) drawHit(canvas widget.Canvas, h exportHit) {
 		canvas.DrawRoundRect(h.box, rgb(exportWell), 6)
 		drawFace(canvas, "Settings", geometry.NewRect(h.box.Min.X+10, h.box.Min.Y+6, h.box.Width()-36, 20), 13, ink, false, e.theme.UIFont)
 		drawFace(canvas, "›", geometry.NewRect(h.box.Max.X-22, h.box.Min.Y+6, 16, 20), 13, muted, false, e.theme.UIFont)
+	case h.id == "saved-files":
+		drawFace(canvas, "Uses the files saved on the server.", h.box, 12, muted, false, e.theme.UIFont)
 	case h.id == "go":
 		canvas.DrawRoundRect(h.box, rgb(exportWell), 6)
 		drawCenter(canvas, "Export", h.box, 13, ink, false, e.theme.UIFont)

@@ -229,6 +229,10 @@ local DIAGRAM_WIDTH_MM = 166
 local DIAGRAM_HEIGHT_MM = 190
 
 local function read_bytes(path)
+  if os.getenv("LENS_LIBRARY_SNAPSHOT") == "true" then
+    local _, bytes = pandoc.mediabag.lookup(path)
+    return bytes
+  end
   local handle = io.open(path, "rb")
   if not handle then
     return nil

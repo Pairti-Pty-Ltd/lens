@@ -35,12 +35,19 @@ func (s *shell) loadHistory() {
 		s.histErr = "Open a project"
 		return
 	}
+	if s.remote != nil && s.remote.history != nil {
+		s.remote.history.generation++
+	}
 	s.readHistory(historyBatch)
 	s.branchFor = ""
 	s.noteBranch()
 }
 
 func (s *shell) readHistory(limit int) {
+	if s.remote != nil && s.remote.history != nil {
+		s.readLibraryHistory(limit - historyBatch)
+		return
+	}
 	commits, err := gitlog.Log(s.histRoot, s.histRel, limit+1)
 	if err != nil {
 		s.histErr = "Not a git repository"
@@ -58,6 +65,12 @@ func (s *shell) historyScope() (root, rel string) {
 	root = s.projectRoot()
 	if root == "" {
 		return "", ""
+	}
+	if s.remote != nil {
+		if s.histRepo || s.docPath == "" {
+			return root, ""
+		}
+		return root, strings.TrimPrefix(s.docPath, root+"/")
 	}
 	top, err := gitlog.Top(root)
 	if err != nil {
@@ -157,6 +170,11 @@ func (s *shell) toggleHist(hash string) {
 	s.histOpen[hash] = !s.histOpen[hash]
 	if s.histOpen[hash] {
 		if _, ok := s.histFiles[hash]; !ok {
+			if s.remote != nil && s.remote.history != nil {
+				s.readLibraryFiles(hash)
+				s.refresh()
+				return
+			}
 			files, err := gitlog.Files(s.histRoot, hash)
 			if err == nil {
 				s.histFiles[hash] = files
@@ -224,8 +242,12 @@ func (s *shell) showDiff(hash, rel string) {
 	s.syncAction()
 	s.syncCommand()
 	root, wake := s.histRoot, s.wake
+	compare := gitlog.CompareContext
+	if s.remote != nil && s.remote.history != nil {
+		compare = s.remote.history.compare
+	}
 	go func() {
-		model, err := gitlog.CompareContext(ctx, root, hash, rel)
+		model, err := compare(ctx, root, hash, rel)
 		if ctx.Err() != nil {
 			return
 		}

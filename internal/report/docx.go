@@ -72,7 +72,19 @@ func exportDocx(req ExportRequest, b Brand, dir, name, title, author, date, lice
 		}
 		args = append(args, "--reference-doc=reference.docx", "--lua-filter=filter.lua")
 	}
-	body := stageMarkdownImages(work, req.Base, stageDiagrams(work, stripFront(req.Src)))
+	body := stageMarkdownImages(work, req.Base, stageDiagrams(work, stripFront(req.Src)), req.LibrarySnapshot)
+	if req.LibrarySnapshot {
+		args = append([]string{"--sandbox", "--lua-filter=stage-media.lua"}, args...)
+		// The reader and writer are sandboxed, while Lua filters have host
+		// access. Populate the media bag exclusively from server-created files.
+		filter, err := brandFS.ReadFile("brand/snapshot-media.lua")
+		if err != nil {
+			return Result{}, err
+		}
+		if err = os.WriteFile(filepath.Join(work, "stage-media.lua"), filter, 0600); err != nil {
+			return Result{}, err
+		}
+	}
 	if err := os.WriteFile(filepath.Join(work, "note.md"), body, 0o644); err != nil {
 		return Result{}, err
 	}
@@ -102,7 +114,7 @@ func exportDocx(req ExportRequest, b Brand, dir, name, title, author, date, lice
 	defer cancel()
 	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Dir = work
-	cmd.Env = append(os.Environ(), "LENS_STYLE_PREFIX="+b.StylePrefix, "LENS_TABLE_INK="+b.TableInk,
+	cmd.Env = append(os.Environ(), fmt.Sprintf("LENS_LIBRARY_SNAPSHOT=%t", req.LibrarySnapshot), "LENS_STYLE_PREFIX="+b.StylePrefix, "LENS_TABLE_INK="+b.TableInk,
 		"LENS_BODY_FONT="+b.BodyFont, "LENS_LOGO_WIDTH="+fmt.Sprintf("%dmm", b.LogoWidth), "LENS_LOGO_ALT="+b.Label+" logo")
 	output, err := cmd.CombinedOutput()
 	if err != nil {

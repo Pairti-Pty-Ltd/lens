@@ -27,17 +27,18 @@ const defaultTemplate = `#let title = sys.inputs.at("title", default: "Report")
 // Job is one export. Empty Template uses the profile, then the built-in page.
 // Out, when set, is the PDF path and the page images are not written.
 type Job struct {
-	brand    *Brand
-	Root     string
-	Src      []byte
-	Bin      string
-	Title    string
-	Author   string
-	Date     string
-	Template string
-	Out      string
-	Inputs   map[string]string
-	Base     string
+	librarySnapshot bool
+	brand           *Brand
+	Root            string
+	Src             []byte
+	Bin             string
+	Title           string
+	Author          string
+	Date            string
+	Template        string
+	Out             string
+	Inputs          map[string]string
+	Base            string
 }
 
 // NotInstalledError is a missing typst binary.
@@ -111,7 +112,7 @@ func CompileJob(j Job) (Result, error) {
 	if base == "" {
 		base = j.Root
 	}
-	main, fontDir, err := writeJob(work, j.Root, base, j.Src, name, j.brand)
+	main, fontDir, err := writeJob(work, j.Root, base, j.Src, name, j.brand, j.librarySnapshot)
 	if err != nil {
 		return Result{}, err
 	}
@@ -159,9 +160,9 @@ func CompileJob(j Job) (Result, error) {
 	return res, nil
 }
 
-func writeJob(work, root, base string, src []byte, name string, pack *Brand) (string, string, error) {
+func writeJob(work, root, base string, src []byte, name string, pack *Brand, librarySnapshot bool) (string, string, error) {
 	body := filepath.Join(work, "body.typ")
-	if err := os.WriteFile(body, []byte(writeBody(work, base, src)), 0o644); err != nil {
+	if err := os.WriteFile(body, []byte(renderBody(work, base, src, librarySnapshot)), 0o644); err != nil {
 		return "", "", err
 	}
 	main := filepath.Join(work, "main.typ")

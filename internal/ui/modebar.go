@@ -221,7 +221,9 @@ func (r *ReportBar) Draw(_ widget.Context, canvas widget.Canvas) {
 	name := fitRun(canvas, r.label(), 13, rgb(r.theme.Ink), r.theme.UIFont, chev.Min.X-field.Min.X-12)
 	drawFace(canvas, name, geometry.NewRect(field.Min.X+10, field.Min.Y+4, chev.Min.X-field.Min.X-12, 20), 13, rgb(r.theme.Ink), false, r.theme.UIFont)
 	box := geometry.NewRect(b.Max.X-toolSlot+6, b.Min.Y+6, 16, 16)
-	icon.Draw(canvas, icon.Add, box, rgb(r.theme.Muted))
+	if r.add != nil {
+		icon.Draw(canvas, icon.Add, box, rgb(r.theme.Muted))
+	}
 	if !r.open {
 		return
 	}

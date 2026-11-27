@@ -2,7 +2,7 @@
 title: Browser WASM Editor
 type: topic
 sources: [beads]
-related: [entities/gogpu.md, entities/lens-editor.md, entities/pairti-lens.md]
+related: [entities/gogpu.md, entities/lens-editor.md, entities/pairti-lens.md, topics/single-compile-rendering.md, topics/report-brand-packs.md]
 updated: 2026-11-28
 ---
 
@@ -44,13 +44,32 @@ Pairti Lens includes a standalone WebAssembly build (`cmd/lens-wasm`) that runs 
 - **Disable software scene recording**: `runBrowser` calls `widget.RegisterSceneRecorder(nil)` so widgets draw directly; desktop boundary scene recording rasterizes entire boundaries in software under WebAssembly and degrades click-to-paint latency.
 - **Syntax span caching on resize**: `internal/ui/source_rows.go` caches per-line highlight spans on `Editor.lineColors` keyed by `(file, text)` so window resizes and sidebar toggles only re-wrap lines instead of re-running `doc.MarkdownLines` or `doc.TokenLines`.
 
+### Tracked Git History & Diffs (`lens-77q.1`)
+- **Read-only history routes**: `cmd/lens-library/history.go` serves `GET /api/history/{log,files,diff}` scoped to tracked Markdown files (`doc.IsMarkdown`). For `files` and `diff`, it validates 40/64-character hex commit IDs and enforces `git merge-base --is-ancestor <hash> HEAD` so arbitrary or unreachable Git objects cannot be queried.
+- **Off-thread async client**: `cmd/pairti-lense/browser_history.go` (`libraryHistory`) fetches history off the UI thread and applies results on the shell tick via a `pending` channel with a monotonic `generation` counter to drop stale responses.
+- **Local mode isolation**: `browserSideAvailable` enables `ui.SideHistory` only when `s.remote.history != nil`, keeping standalone `/local/` imports independent of Git.
+
+### Confined Server-Side Report Publishing & Preview (`lens-77q.2`)
+- **Report endpoints**: `cmd/lens-library` exposes `GET /api/reports` (project book/report order and available export formats, passed to WASM via `setReportCatalog`) and `POST /api/report/export?report=<id>&output=<fmt>`, serialized under `exportJob sync.Mutex`.
+- **Saved-documents-only & confined staging**: Server exports read saved tracked documents only (never unsaved browser buffer edits), stage inputs and relative images inside a private per-job directory (`LibrarySnapshot`), and reuse `internal/report` plus installed [[Report Brand Packs]] (supporting legacy settings and project profiles).
+- **Sandboxed Pandoc DOCX media staging**: When `LibrarySnapshot` is set, `internal/report/docx.go` invokes Pandoc with `--sandbox --lua-filter=stage-media.lua`. Because Pandoc's sandbox disables filesystem reads by the DOCX writer while Lua filters retain host access, `internal/report/brand/snapshot-media.lua` pre-populates `pandoc.mediabag` exclusively from server-generated job files (`logo.png`, `img-<n>.<ext>`, `diag-<n>.png`, `diag-<n>-<m>.png`).
+- **Single-blob preview and download**: `cmd/pairti-lense/web/index.html` (`exportReport`) creates one `URL.createObjectURL(blob)` from the `POST /api/report/export` response, rendering PDFs in `<dialog id="publication">`'s `<iframe>` and offering that exact blob URL for download (revoking the URL and restoring canvas focus on close).
+
+### Browser vs. Desktop Capability Boundary (`lens-77q`)
+- **Menu and mode gating**: `startup_js.go` (`browserCommand`) and `main.go` expose only backend-verified browser actions (`File/Save`, `File/Close Tab`, `Go/History` when `remote.history != nil`, and `Reports/Export Report…` / `Reports/Open Report` when `remote.export != nil`), marking platform-only commands unavailable in the matching mode.
+- **Remaining desktop-only facilities**: Native file/folder pickers and destination reveal, terminal/PTY, system integration, relative attachment loading (requires a constrained library asset service), and clipboard integration (`Edit/Cut`, `Copy`, `Paste` stay disabled in browser mode).
+
 ## Pitfalls
 - **WebGPU adapter required even with CPU fallback**: During testing, GoGPU logged a CPU rendering fallback while painting, yet startup still requires a working WebGPU adapter (`navigator.gpu.requestAdapter()`).
-- **Canvas focus management**: Interacting with HTML controls (`<input type="file">`, download button) steals keyboard focus from the `<canvas>`. Both JS (`canvas.focus()`) and Go (`window.Window().Context().RequestFocus(editor)` + `host.RequestRedraw()`) must restore focus after import/save.
+- **Canvas focus management**: Interacting with HTML controls (`<input type="file">`, download button, or `<dialog id="publication">`) steals keyboard focus from the `<canvas>`. Both JS (`canvas.focus()`) and Go (`window.Window().Context().RequestFocus(editor)` + `host.RequestRedraw()`) must restore focus after import/save/dialog close.
+- **Synchronous vs. asynchronous clipboard**: Desktop widget clipboard callbacks are synchronous, whereas browser Clipboard API permissions and reads/writes are asynchronous; bridging them requires rethinking the synchronous widget contract.
+- **Pandoc `--sandbox` drops writer file reads**: Running `pandoc --sandbox` for `.docx` prevents the DOCX writer from reading staged images from disk; media must be inserted into `pandoc.mediabag` via a pre-filter (`snapshot-media.lua`) limited to server-created job files.
 - **Keep `internal/ui` WASM-safe**: Any new `internal/ui` file that imports OS-specific packages (PTY, `fsnotify`, `os/exec`) must be guarded with `//go:build !js` or isolated outside `internal/ui`, otherwise `make wasm` will break.
-- **Untested areas**: IME input was not verified in the browser build; Formatted view and project/workspace features remain desktop-only.
+- **Untested areas**: IME input was not verified in the browser build; native project/workspace management remains desktop-only.
 
 ## See Also
 - [[GoGPU]]
 - [[Lens Editor]]
 - [[Pairti Lens]]
+- [[Single-Compile Rendering]]
+- [[Report Brand Packs]]

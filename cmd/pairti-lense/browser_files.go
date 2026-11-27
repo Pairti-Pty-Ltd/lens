@@ -9,6 +9,9 @@ import (
 // Browser reads complete after the input event returns. Re-enter the normal
 // tab-opening path so the current tab's dirty state is checked at completion.
 type browserFiles struct {
+	history   *libraryHistory
+	formats   []ui.ExportFormat
+	export    func(reportID, name, output string)
 	load      func(ui.Item, func(ui.Item))
 	save      func(string, *edit.Buffer)
 	list      func()

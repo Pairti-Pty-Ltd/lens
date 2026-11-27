@@ -915,6 +915,9 @@ func (s *shell) tick(ctx widget.Context) {
 		}
 	}
 	edited := s.receiveDiff()
+	if s.remote != nil && s.remote.history != nil && s.remote.history.receive() {
+		edited = true
+	}
 	if s.drainAgent() {
 		edited = true
 	}
@@ -1489,7 +1492,7 @@ func (s *shell) noteBranch() {
 	if root == "" {
 		root = s.histRoot
 	}
-	if root == s.branchFor {
+	if root == s.branchFor || s.remote != nil {
 		return
 	}
 	s.branchFor = root
@@ -1877,7 +1880,10 @@ func (s *shell) syncNumberButton() {
 func (s *shell) toolAvailable(name string) bool {
 	if s.remote != nil {
 		switch name {
-		case "Shell", "New", "Open", "Remove", "Export", "Tag":
+		case "Export":
+			rep, ok := s.book.Current()
+			return s.reportMode && s.remote.export != nil && ok && len(rep.Files) > 0
+		case "Shell", "New", "Open", "Remove", "Tag":
 			return false
 		}
 	}
@@ -2189,7 +2195,7 @@ func (s *shell) build() widget.Widget {
 	s.pane = left
 	bar := ui.NewModeBar(s.setSide)
 	if s.remote != nil {
-		bar.SetAvailable(func(mode int) bool { return mode == ui.SideFiles })
+		bar.SetAvailable(s.browserSideAvailable)
 	}
 	bar.SetTheme(s.look)
 	left.SetBar(bar)
@@ -2200,7 +2206,11 @@ func (s *shell) build() widget.Widget {
 	})
 	s.histScopeBar.SetTheme(s.look)
 	left.SetHistoryBar(s.histScopeBar)
-	plus := ui.NewReportBar(s.newReport, s.pickReportProject)
+	addReport := s.newReport
+	if s.remote != nil {
+		addReport = nil
+	}
+	plus := ui.NewReportBar(addReport, s.pickReportProject)
 	plus.SetTheme(s.look)
 	s.reports = plus
 	left.SetReportBar(plus)
@@ -2519,9 +2529,13 @@ func (s *shell) reportItems() []ui.Item {
 		if !open {
 			continue
 		}
+		orderID := r.ID
+		if s.remote != nil {
+			orderID = "" // Library reports expose their saved publication order.
+		}
 		for _, rel := range r.Files {
 			out = append(out, ui.Item{
-				Depth: 1, Label: filepath.Base(rel), Note: r.ID, Rel: rel,
+				Depth: 1, Label: filepath.Base(rel), Note: orderID, Rel: rel,
 				Path:        filepath.Join(root, filepath.FromSlash(rel)),
 				ProjectRoot: root, ProjectName: name,
 			})
@@ -2699,6 +2713,20 @@ func (s *shell) openReport(id string) {
 	if rep == nil {
 		return
 	}
+	if s.remote != nil {
+		// Selecting a publication leaves the active editor and its undo history intact.
+		s.book.Open = id
+		if s.reportOpen == nil {
+			s.reportOpen = map[string]bool{}
+		}
+		s.reportOpen[id] = true
+		s.refresh()
+		if s.side != nil {
+			s.side.Select("report:" + id)
+		}
+		s.redraw()
+		return
+	}
 	s.remember()
 	s.book.Open = id
 	s.saveReports()
@@ -2773,8 +2801,8 @@ func (s *shell) newReport() {
 }
 
 func (s *shell) setSide(mode int) {
-	if s.remote != nil && mode != ui.SideFiles {
-		s.showMessage("This library serves Markdown files. Reports and Git history require server adapters.")
+	if s.remote != nil && !s.browserSideAvailable(mode) {
+		s.showMessage("This command is unavailable in this workspace.")
 		return
 	}
 	wasDiff := s.diff != nil
@@ -2880,8 +2908,15 @@ func (s *shell) openExportScope(reportScope bool) {
 		return
 	}
 	var list []ui.ExportFormat
-	for _, b := range report.Outputs() {
-		list = append(list, ui.ExportFormat{ID: b.ID, Label: b.Label})
+	if s.remote != nil {
+		if !reportScope || s.remote.export == nil {
+			return
+		}
+		list = s.remote.formats
+	} else {
+		for _, b := range report.Outputs() {
+			list = append(list, ui.ExportFormat{ID: b.ID, Label: b.Label})
+		}
 	}
 	s.sheet.SetFormats(list)
 	anchor := geometry.Rect{}
@@ -2898,11 +2933,16 @@ func (s *shell) openExportScope(reportScope bool) {
 		if rep, ok := s.book.Current(); ok {
 			title = rep.Name
 			s.exportRoot, s.exportName = s.reportRoot, rep.Name
-			s.sheet.SetProject(rep.Name, rep.Files, rep.Template)
+			template := rep.Template
+			if s.remote != nil && template == "" {
+				template = "default"
+			}
+			s.sheet.SetProject(rep.Name, rep.Files, template)
 		}
 	}
 	s.sheet.Show(title, anchor)
 	s.sheet.FixScope(reportScope)
+	s.sheet.SetDownloadOnly(s.remote != nil)
 	if s.wake != nil {
 		s.wake()
 	}
@@ -2945,6 +2985,12 @@ func (s *shell) loadProject(sheet *ui.ExportSheet) {
 }
 
 func (s *shell) commitExport(choice ui.ExportChoice) {
+	if s.remote != nil {
+		if rep, ok := s.book.Current(); ok && choice.Project && s.remote.export != nil {
+			s.remote.export(rep.ID, rep.Name, choice.Brand)
+		}
+		return
+	}
 	if !choice.Project && (s.buf == nil || s.docPath == "") {
 		return
 	}

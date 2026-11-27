@@ -186,3 +186,39 @@ func TestReportMenuExportSelectedBook(t *testing.T) {
 		t.Fatalf("wrong template, documents or order:\n%s", body)
 	}
 }
+
+func TestLibraryReportMenuExportsSavedSelectionAndKeepsDraft(t *testing.T) {
+	s := testShell()
+	draftPath := openNote(t, s, "# Working draft")
+	draft := s.buf
+	draft.InsertText("unsaved ")
+	root := filepath.Dir(draftPath)
+	s.projects = []doc.Project{{Name: "Library", Root: root}}
+	s.lib = &library.Library{Paths: []string{root}}
+	s.reportRoot = root
+	s.book = project.Book{Open: "first", Reports: []project.Report{
+		{ID: "first", Name: "First", Files: []string{"one.md"}},
+		{ID: "manual", Name: "Manual", Template: "cedar", Files: []string{"two.md", "one.md"}},
+	}}
+	var got []string
+	s.remote = &browserFiles{
+		formats: []ui.ExportFormat{{ID: "default.pdf", Label: "Default (pdf)"}, {ID: "cedar.pdf", Label: "Cedar (pdf)"}},
+		export:  func(id, name, output string) { got = []string{id, name, output} },
+	}
+	s.sheet = ui.NewExportSheet(s.commitExport)
+	s.sheet.SetBounds(geometry.NewRect(0, 0, 1000, 800))
+	reportCommand(t, s, menuGroup("Reports", "Open Report", "Library"), "Manual").invoke()
+	reportCommand(t, s, "Reports", "Export Report…").invoke()
+	for _, id := range []string{"current", "pick", "open"} {
+		if _, ok := s.sheet.Spot(id); ok {
+			t.Fatalf("native destination %s shown", id)
+		}
+	}
+	p, ok := s.sheet.Spot("go")
+	if !ok || !uitest.SimulateClick(s.sheet, p.X, p.Y) {
+		t.Fatal("missing export button")
+	}
+	if !slices.Equal(got, []string{"manual", "Manual", "cedar.pdf"}) || s.buf != draft || !s.buf.Dirty() || s.docPath != draftPath {
+		t.Fatalf("export %v, active path %q, dirty %v", got, s.docPath, s.buf.Dirty())
+	}
+}

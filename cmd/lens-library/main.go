@@ -26,13 +26,18 @@ import (
 )
 
 type library struct {
-	root   *os.Root
-	writes sync.Mutex
+	root      *os.Root
+	writes    sync.Mutex
+	exportJob sync.Mutex
 }
 
 // Read the index, including the entry mode, so links and conflicted entries
 // never become editable documents. Read the actual text from the working tree.
 func (l *library) documents(ctx context.Context, path string) ([]string, error) {
+	return l.tracked(ctx, path, doc.IsMarkdown)
+}
+
+func (l *library) tracked(ctx context.Context, path string, include func(string) bool) ([]string, error) {
 	args := []string{"-C", l.root.Name(), "--literal-pathspecs", "ls-files", "--stage", "-z", "--"}
 	if path != "" {
 		args = append(args, path)
@@ -47,7 +52,7 @@ func (l *library) documents(ctx context.Context, path string) ([]string, error) 
 		if !ok || !strings.HasSuffix(header, " 0") || !(strings.HasPrefix(header, "100644 ") || strings.HasPrefix(header, "100755 ")) {
 			continue
 		}
-		if doc.IsMarkdown(path) && fs.ValidPath(path) && utf8.ValidString(path) && l.regular(path) {
+		if include(path) && fs.ValidPath(path) && utf8.ValidString(path) && l.regular(path) {
 			names = append(names, path)
 		}
 	}
@@ -168,9 +173,12 @@ func (l *library) replace(path string, data []byte, mode fs.FileMode) error {
 
 func (l *library) handler(assets string) http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/history/{action}", l.history)
 	mux.HandleFunc("GET /api/documents", l.api)
 	mux.HandleFunc("GET /api/document", l.api)
 	mux.HandleFunc("PUT /api/document", l.api)
+	mux.HandleFunc("GET /api/reports", l.reportList)
+	mux.HandleFunc("POST /api/report/export", l.exportReport)
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/library/", http.StatusFound) })
 	for _, base := range []string{"/library/", "/local/"} {
 		mux.HandleFunc("GET "+base+"{$}", func(w http.ResponseWriter, r *http.Request) {

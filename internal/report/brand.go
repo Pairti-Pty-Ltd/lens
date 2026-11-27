@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-//go:embed brand/brand.typ brand/docx.lua
+//go:embed brand/brand.typ brand/docx.lua brand/snapshot-media.lua
 var brandFS embed.FS
 
 // Brand is a version 1 manifest. The containing directory supplies its stable ID.
