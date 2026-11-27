@@ -2,7 +2,7 @@
 
 ## Motivation
 
-Oh no, not another Markdown viewer and editor. I keep the work as projects in Git, with several folders open at once, and I want a compiled Typst report, with a preview of the PDF pages. After years with Electron editors I wanted a fast app in Go, drawn on the GPU in a native OS window. Lens takes its lead from Zettlr.
+Oh no, not another Markdown viewer and editor. I keep the work as projects in Git, with several folders open at once, and I want a compiled Typst report, with a preview of the PDF pages. After years with Electron editors I wanted a fast app in Go, drawn on the GPU in a native OS window. Lens takes its lead from Zettlr. In use, Lens is neck-jerkingly fast.
 
 A desktop Markdown editor for notes and reports kept in Git repositories.
 
