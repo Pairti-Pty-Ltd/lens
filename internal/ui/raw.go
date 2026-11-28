@@ -361,6 +361,9 @@ func (p *Page) pointSource(at geometry.Point) (int, int) {
 			}
 			col := ln.col
 			dx := at.X - p.Bounds().Min.X - p.gutterWidth()
+			if ln.quoteLine != 0 {
+				dx -= quotePad
+			}
 			pieces := ln.pieces
 			if ln.gridCell && len(ln.cellLines[0]) > 0 {
 				idx := int((at.Y - y - cellPadY) / (p.theme.Body * proseLead))
@@ -509,7 +512,11 @@ func (p *Page) moveScreen(delta int) {
 	line, col := p.buf.CaretLine()+1, p.buf.CaretCol()
 	// Lay out the destination source lines as they will appear while active.
 	rows := func(n int) []rendered {
+		width := width
 		for _, b := range p.blocks {
+			if b.QuoteLine != 0 && n >= b.Line && n < b.Line+max(1, b.Lines) {
+				width = max(1, width-2*quotePad)
+			}
 			if b.Line == n && p.literalParagraph(b) {
 				return p.layoutOne(b, width, p.theme)
 			}

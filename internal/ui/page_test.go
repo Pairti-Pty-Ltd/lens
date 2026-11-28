@@ -201,7 +201,7 @@ func TestPageWordsUseMeasuredAdvances(t *testing.T) {
 	p := NewPage()
 	p.SetBlocks([]doc.Block{{
 		Kind:  "p",
-		Spans: []doc.Span{{Text: "Hello"}, {Text: "world"}},
+		Spans: []doc.Span{{Text: "Hello "}, {Text: "world"}},
 	}})
 	uitest.LayoutWidget(p, 480, 200)
 	p.SetBounds(geometry.NewRect(0, 0, 480, 200))
@@ -832,4 +832,144 @@ func verticalBar(c *uitest.MockCanvas) bool {
 		}
 	}
 	return false
+}
+
+func TestInlineCodeSpacing(t *testing.T) {
+	for _, prefix := range []string{"", "> "} {
+		for _, width := range []float32{265, 850} {
+			for _, scale := range []float32{1, 1.5} {
+				src := prefix + "At the margin (`example-id`). Use  `beta` here; then `gamma`, again."
+				p := NewPage()
+				p.SetTheme(p.theme.Scale(scale))
+				b := edit.New(src)
+				p.UseBuffer(b)
+				p.SetBlocks(doc.Blocks([]byte(src)))
+				c := drawPage(p, width, 900)
+				var row string
+				var displayed []string
+				var lastY, end float32
+				for _, tx := range c.StyledTexts {
+					if row != "" && tx.Bounds.Min.Y != lastY {
+						displayed = append(displayed, row)
+						row = ""
+					}
+					if row != "" && tx.Bounds.Min.X != end {
+						t.Fatalf("unexpected gap or overlap at %q, %v != %v", tx.Text, tx.Bounds.Min.X, end)
+					}
+					row += tx.Text
+					lastY = tx.Bounds.Min.Y
+					end = tx.Bounds.Min.X + c.MeasureStyledText(tx.Text, tx.Style)
+					if end > width+.01 {
+						t.Fatalf("%q clips at width %v, scale %v", row, width, scale)
+					}
+					if tx.Text == "example-id" && tx.Style.FontFamily != p.theme.CodeFont {
+						t.Fatalf("wrong code face: %+v", tx.Style)
+					}
+				}
+				displayed = append(displayed, row)
+				result := strings.Join(displayed, " ")
+				if !strings.Contains(result, "(example-id).") || !strings.Contains(result, "gamma,") || !strings.Contains(result, "beta here;") {
+					t.Fatalf("width %v scale %v: %q", width, scale, displayed)
+				}
+				if width == 850 && !strings.Contains(result, "Use  beta here;") {
+					t.Fatalf("lost source spaces: %q", result)
+				}
+				if b.Text() != src || b.Dirty() {
+					t.Fatal("painting changed the raw draft")
+				}
+			}
+		}
+	}
+}
+
+func TestQuotePanelSpansThePassage(t *testing.T) {
+	src, err := os.ReadFile("../../testdata/cedar-interview.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, light := range []bool{false, true} {
+		for _, width := range []float32{310, 950} {
+			p := NewPage()
+			if light {
+				p.theme.Canvas, p.theme.Ink, p.theme.Muted, p.theme.Accent, p.theme.CodeFill = 0xffffff, 0x202020, 0x454545, 0x16519a, 0xebebeb
+			}
+			b := edit.New(string(src))
+			p.UseBuffer(b)
+			p.SetBlocks(doc.Blocks(src))
+			c := drawPage(p, width, 1200)
+			var panels []geometry.Rect
+			for _, r := range c.Rects {
+				if r.Color == mixHex(p.theme.Canvas, p.theme.Ink, 0.07) {
+					panels = append(panels, r.Bounds)
+				}
+			}
+			if len(panels) != 2 || panels[0].Max.Y >= panels[1].Min.Y {
+				t.Fatalf("panels %+v", panels)
+			}
+			var rules int
+			for _, l := range c.Lines {
+				if l.From.X != l.To.X {
+					continue
+				}
+				if rules >= len(panels) || l.From.Y != panels[rules].Min.Y || l.To.Y != panels[rules].Max.Y {
+					t.Fatalf("discontinuous rule %+v", l)
+				}
+				rules++
+			}
+			if rules != 2 {
+				t.Fatalf("rules %d", rules)
+			}
+			seen := map[string]bool{}
+			for _, tx := range c.StyledTexts {
+				switch tx.Text {
+				case "Mira", "We":
+					if tx.Bounds.Min.X != panels[0].Min.X+quotePad || !panels[0].Contains(tx.Bounds.Min) {
+						t.Fatalf("first quote %+v", tx)
+					}
+					if tx.Text == "Mira" && !tx.Style.Bold {
+						t.Fatal("lost attribution emphasis")
+					}
+				case "field":
+					if !panels[0].Contains(tx.Bounds.Min) || tx.Style.Color != rgb(p.theme.Accent) {
+						t.Fatal("lost link")
+					}
+				case "File":
+					if tx.Bounds.Min.Y < panels[1].Max.Y {
+						t.Fatal("following list inside quote")
+					}
+				default:
+					continue
+				}
+				seen[tx.Text] = true
+			}
+			if len(seen) != 4 {
+				t.Fatalf("missing quote content: %v", seen)
+			}
+			var wraps int
+			for _, row := range p.lines {
+				if row.quoteLine == 5 && row.src == 7 && len(row.pieces) > 0 {
+					wraps++
+					if row.pieces[0].pad != 0 || strings.HasPrefix(row.pieces[0].text, " ") {
+						t.Fatal("continuation misaligned")
+					}
+				}
+			}
+			if width == 310 && wraps < 2 {
+				t.Fatal("fixture did not wrap")
+			}
+			start := strings.Index(string(src), "We label")
+			b.Modal.Drag(b, start, start+2)
+			p.openLine = 7
+			c = drawPage(p, width, 1200)
+			var selected bool
+			for _, r := range c.Rects {
+				if r.Color == rgba(p.theme.Selection) && r.Bounds.Min.X >= panels[0].Min.X+quotePad {
+					selected = true
+				}
+			}
+			if !selected {
+				t.Fatal("selection missing from inset quote")
+			}
+		}
+	}
 }

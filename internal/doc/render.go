@@ -163,7 +163,9 @@ func renderQuote(n *ast.Blockquote, src []byte, depth int) []Block {
 		}
 		return inner
 	}
+	quoteLine := max(1, inner[0].Line)
 	for i := range inner {
+		inner[i].QuoteLine = quoteLine
 		if inner[i].Kind == "p" || strings.HasPrefix(inner[i].Kind, "h") {
 			inner[i].Kind = "quote"
 		}

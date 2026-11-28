@@ -23,6 +23,7 @@ const (
 	readNum     = float32(40) // source line, right aligned
 	readTag     = float32(28) // h1, h2, …
 	readGutter  = readNum + readTag
+	quotePad    = float32(10)
 	diagramMaxH = float32(2400)
 	// proseLead is the line box for reading text. Theme.Line (1.6) left too
 	// much air between wrapped lines of one paragraph.
@@ -105,7 +106,7 @@ type rendered struct {
 	tableEnd  bool
 	rule      bool
 	gap       bool
-	quote     bool
+	quoteLine int
 	num       int
 	src       int // source line this row belongs to, even when the number is not drawn
 	col       int // rune offset of this row in that source line
@@ -374,7 +375,7 @@ func (p *Page) Draw(_ widget.Context, canvas widget.Canvas) {
 	canvas.PushClip(b)
 	defer canvas.PopClip()
 	y := b.Min.Y
-	x0 := b.Min.X + p.gutterWidth()
+	left := b.Min.X + p.gutterWidth()
 	width := b.Width() - p.gutterWidth()
 	if width < 1 {
 		width = 1
@@ -395,6 +396,19 @@ func (p *Page) Draw(_ widget.Context, canvas widget.Canvas) {
 		ln := p.lines[i]
 		y += ln.before
 		h := p.rowHeight(ln)
+		x0, width := left, width
+		if ln.quoteLine != 0 {
+			if i == 0 || p.lines[i-1].quoteLine != ln.quoteLine {
+				height := h
+				for j := i + 1; j < len(p.lines) && p.lines[j].quoteLine == ln.quoteLine; j++ {
+					height += p.lines[j].before + p.rowHeight(p.lines[j])
+				}
+				canvas.DrawRect(geometry.NewRect(left, y, width, height), mixHex(p.theme.Canvas, p.theme.Ink, 0.07))
+				canvas.DrawLine(geometry.Pt(left+1, y), geometry.Pt(left+1, y+height), rgb(p.theme.Muted), 2)
+			}
+			x0 += quotePad
+			width = max(1, width-2*quotePad)
+		}
 		if p.lineNumbers && ln.num > 0 {
 			p.drawNum(canvas, ln.num, b.Min.X, y, h, p.lineSize(ln))
 		}
@@ -435,9 +449,6 @@ func (p *Page) Draw(_ widget.Context, canvas widget.Canvas) {
 			gy := y + baselineShift(p.lineSize(ln), p.theme.Meta)
 			drawFace(canvas, ln.gutter, geometry.NewRect(b.Min.X+readNum, gy, readTag, h), p.theme.Meta, rgb(p.theme.Muted), false, p.theme.UIFont)
 		}
-		if ln.quote {
-			canvas.DrawLine(geometry.Pt(x0-14, y+2), geometry.Pt(x0-14, y+h-2), rgb(p.theme.Muted), 2)
-		}
 		x := x0
 		if ln.yaml >= 2 {
 			x += 12
@@ -459,7 +470,7 @@ func (p *Page) Draw(_ widget.Context, canvas widget.Canvas) {
 		}
 		var end float32
 		for _, pc := range ln.pieces {
-			adv := p.advance(canvas, pc)
+			adv := p.pieceWidth(pc)
 			if pc.img != nil {
 				dy := (h - pc.imgH) / 2
 				if dy < 0 {
@@ -548,22 +559,6 @@ func (p *Page) lineSize(ln rendered) float32 {
 		}
 	}
 	return size
-}
-
-func (p *Page) advance(canvas widget.Canvas, pc piece) float32 {
-	if pc.pad > 0 {
-		return pc.pad
-	}
-	if pc.img != nil {
-		return pc.imgW
-	}
-	if pc.bullet || pc.box {
-		return 16
-	}
-	if pc.text == "" {
-		return 0
-	}
-	return textWidth(canvas, pc.text, pc.size, pc.color, pc.bold, pc.family)
 }
 
 func (p *Page) drawPiece(canvas widget.Canvas, pc piece, rect geometry.Rect) {
@@ -761,27 +756,38 @@ func (p *Page) layoutBlocks(width float32) []rendered {
 	last := 0
 	for i := 0; i < len(p.blocks); i++ {
 		b := p.blocks[i]
+		inner := width
+		if b.QuoteLine != 0 {
+			inner = max(1, width-2*quotePad)
+		}
+		gaps := p.placeBlock(b, last, inner)
+		if i > 0 && p.blocks[i-1].QuoteLine == b.QuoteLine {
+			for j := range gaps {
+				gaps[j].quoteLine = b.QuoteLine
+			}
+		}
+		lines = append(lines, gaps...)
+		last = advanceLine(last, b)
+		var rows []rendered
 		if b.Kind == "th" || b.Kind == "tr" {
 			j := i + 1
-			for j < len(p.blocks) && p.blocks[j].Kind == "tr" {
+			for j < len(p.blocks) && p.blocks[j].Kind == "tr" && p.blocks[j].QuoteLine == b.QuoteLine {
 				j++
 			}
-			lines = append(lines, p.placeBlock(b, last, width)...)
-			last = advanceLine(advanceLine(last, b), p.blocks[j-1])
+			last = advanceLine(last, p.blocks[j-1])
 			if p.covers(b.Line, last) {
-				lines = append(lines, p.layoutRawSpan(b.Line, last, "p", width)...)
+				rows = p.layoutRawSpan(b.Line, last, "p", inner)
 			} else {
-				lines = append(lines, p.layoutTable(p.blocks[i:j], width)...)
+				rows = p.layoutTable(p.blocks[i:j], inner)
 			}
 			i = j - 1
-			continue
+		} else {
+			rows = p.layoutOne(b, inner, th)
 		}
-		lines = append(lines, p.placeBlock(b, last, width)...)
-		last = advanceLine(last, b)
-		rows := p.layoutOne(b, width, th)
-		if b.Kind == "code" && i > 0 && p.blocks[i-1].Kind == "code" {
-			for n := range rows {
-				rows[n].before = 0
+		for j := range rows {
+			rows[j].quoteLine = b.QuoteLine
+			if b.Kind == "code" && i > 0 && p.blocks[i-1].Kind == "code" {
+				rows[j].before = 0
 			}
 		}
 		lines = append(lines, rows...)
@@ -1139,7 +1145,7 @@ func (p *Page) layoutOne(b doc.Block, width float32, th theme.Theme) []rendered 
 		}
 		visual := wrapCode(pieces, width, size)
 		for v, rowPieces := range visual {
-			ln := rendered{pieces: rowPieces, fill: fill, quote: b.Kind == "quote"}
+			ln := rendered{pieces: rowPieces, fill: fill}
 			if b.Kind == "code" || b.Kind == "html" {
 				if b.Line > 0 {
 					ln.src = b.Line + i
@@ -1398,111 +1404,86 @@ func (p *Page) layoutFlow(b doc.Block, spans []doc.Span, width, size, before flo
 			return
 		}
 		if len(cur) > 0 && curW+adv > textW {
-			// Keep punctuation attached when a highlight ends at the margin.
-			last := cur[len(cur)-1]
-			if last.marked && tightPunct(pc.text) && p.pieceWidth(last)+adv <= textW {
-				cur = cur[:len(cur)-1]
-				flush()
-				cur = []piece{last}
-				curW = p.pieceWidth(last)
-			} else {
-				flush()
-			}
+			flush()
 		}
 		cur = append(cur, pc)
 		curW += adv
 	}
-	space := func(marked bool) {
-		if len(cur) == 0 {
+	// A word can cross style boundaries, as in (`identifier`). Wrap the
+	// whole word when possible and paint each run with its own font.
+	var word []piece
+	var gap []piece
+	emitWord := func() {
+		if len(word) == 0 {
 			return
 		}
-		last := cur[len(cur)-1]
-		if last.text == " " {
-			return
-		}
-		pc := piece{text: " ", size: size, color: color, family: face, marked: marked && last.marked}
-		if curW+p.pieceWidth(pc) > textW {
+		if len(cur) > 0 && curW+p.piecesWidth(gap)+p.piecesWidth(word) > textW {
 			flush()
-			return
 		}
-		add(pc)
-	}
-	word := func(sp doc.Span, text string) {
-		if text == "" {
-			return
+		if len(cur) > 0 {
+			for _, pc := range gap {
+				add(pc)
+			}
 		}
-		if sp.Note {
-			add(piece{
-				text: text, size: size * 0.65, color: accent, family: face, link: sp.Link,
-			})
-			return
+		for _, pc := range word {
+			add(pc)
 		}
-		if !tightPunct(text) && !stuckTo(cur, sp.Link) {
-			space(sp.Marked)
-		}
-		pc := piece{
-			text: text, size: size, bold: sp.Bold || forceBold,
-			italic: sp.Italic, strike: sp.Strike, marked: sp.Marked, code: sp.Code,
-			color: color, family: face,
-		}
-		if sp.Code {
-			pc.color = muted
-			pc.family = p.theme.CodeFont
-		}
-		if sp.Link != "" && !tightPunct(text) {
-			pc.color = accent
-			pc.link = sp.Link
-		}
-		add(pc)
+		word = word[:0]
+		gap = gap[:0]
 	}
 	for _, sp := range spans {
+		pc := piece{size: size, color: color, family: face, bold: sp.Bold || forceBold,
+			italic: sp.Italic, strike: sp.Strike, marked: sp.Marked, code: sp.Code, link: sp.Link}
+		if sp.Code {
+			pc.color, pc.family = muted, p.theme.CodeFont
+		}
+		if sp.Link != "" {
+			pc.color = accent
+		}
+		if sp.Note {
+			pc.size *= 0.65
+		}
 		if sp.Image {
 			img := p.loadPicture(sp.Link)
-			if img == nil {
-				word(doc.Span{}, imageLabel(sp.Text, sp.Link))
-				if len(cur) > 0 {
-					cur[len(cur)-1].color = muted
-					cur[len(cur)-1].family = face
-				}
+			if img != nil {
+				fw, fh := fitPicture(img.Bounds().Dx(), img.Bounds().Dy(), textW, diagramMaxH)
+				fitted := p.fitted(sp.Link, img, fw, fh)
+				word = append(word, piece{img: fitted, imgW: float32(fitted.Bounds().Dx()), imgH: float32(fitted.Bounds().Dy())})
 				continue
 			}
-			// An image stays in the line, like a Zettlr preview. It keeps its
-			// pixel size unless it is wider than the column, and it wraps to
-			// the next line of the same paragraph when it does not fit.
-			nw, nh := img.Bounds().Dx(), img.Bounds().Dy()
-			fw, fh := fitPicture(nw, nh, textW, diagramMaxH)
-			fitted := p.fitted(sp.Link, img, fw, fh)
-			adv := float32(fitted.Bounds().Dx())
-			gap := float32(0)
-			if len(cur) > 0 && cur[len(cur)-1].text != " " {
-				gap = p.advText(" ", size, false, face)
-			}
-			if len(cur) > 0 && curW+gap+adv > textW {
-				flush()
-				gap = 0
-			}
-			if gap > 0 {
-				add(piece{text: " ", size: size, color: color, family: face})
-			}
-			add(piece{img: fitted, imgW: adv, imgH: float32(fitted.Bounds().Dy())})
-			continue
+			sp.Text = imageLabel(sp.Text, sp.Link)
+			pc.color, pc.link = muted, ""
 		}
-		parts := strings.Split(sp.Text, "\n")
-		for i, part := range parts {
+		for i, part := range strings.Split(sp.Text, "\n") {
 			if i > 0 {
+				emitWord()
 				flush()
+				gap = gap[:0]
 			}
-			for _, w := range strings.Fields(part) {
-				word(sp, w)
+			for len(part) > 0 {
+				n := len(part) - len(strings.TrimLeft(part, " \t"))
+				if n > 0 {
+					emitWord()
+					pc.text = part[:n]
+					gap = append(gap, pc)
+				} else {
+					n = strings.IndexAny(part, " \t")
+					if n < 0 {
+						n = len(part)
+					}
+					pc.text = part[:n]
+					word = append(word, pc)
+				}
+				part = part[n:]
 			}
 		}
 	}
+	emitWord()
 	flush()
 	if len(out) == 0 {
 		return nil
 	}
 	for i := range out {
-		out[i].quote = b.Kind == "quote"
 		out[i].fill = fill
 	}
 	if b.Line > 0 {
@@ -1576,37 +1557,6 @@ func (p *Page) advText(text string, size float32, bold bool, family string) floa
 		em = 0.62
 	}
 	return float32(len([]rune(text))) * size * em
-}
-
-func stuckTo(cur []piece, link string) bool {
-	if len(cur) == 0 || !doc.IsDocLink(link) {
-		return false
-	}
-	last := cur[len(cur)-1].text
-	if last == "" {
-		return false
-	}
-	r := []rune(last)
-	switch r[len(r)-1] {
-	case '(', '[', '{':
-		return true
-	default:
-		return false
-	}
-}
-
-func tightPunct(s string) bool {
-	if s == "" || len([]rune(s)) > 3 {
-		return false
-	}
-	for _, r := range s {
-		switch r {
-		case ',', '.', ';', ':', '!', '?', ')', ']':
-		default:
-			return false
-		}
-	}
-	return true
 }
 
 func markerPiece(marker string, size float32, color widget.Color, face string) piece {

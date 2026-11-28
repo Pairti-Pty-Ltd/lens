@@ -60,6 +60,7 @@ type Block struct {
 	Spans          []Span
 	Cells          []string // table row, one entry per column
 	CellSpans      [][]Span // inline Markdown in each table cell
+	QuoteLine      int      // first content line of the containing blockquote, zero outside
 	GridParagraphs []Block  // one-column Pandoc cell, with document-relative lines
 	CellLinks      []string // wiki or other link for that column, or ""
 	Depth          int
