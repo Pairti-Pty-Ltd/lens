@@ -173,7 +173,7 @@ func (p *Page) SetInline(onEdit, onSave func(), onCmd func(string)) {
 	p.onCmd = onCmd
 }
 
-// OnScroll receives the vertical offset after a navigation key.
+// OnScroll receives the vertical offset requested by page navigation.
 // The scroll view owns the thumb. The page only reports the offset.
 func (p *Page) OnScroll(fn func(float32)) { p.onScroll = fn }
 
@@ -255,6 +255,9 @@ func (p *Page) IsFocusable() bool {
 func (p *Page) SetPath(path string) {
 	if p.path != path {
 		p.frontExpanded = false
+		if p.onScroll != nil {
+			p.onScroll(0)
+		}
 	}
 	p.path = path
 }

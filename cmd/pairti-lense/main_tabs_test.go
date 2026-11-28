@@ -3,7 +3,11 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/gogpu/ui/geometry"
+	"github.com/gogpu/ui/uitest"
 
 	"pairti-lense/internal/library"
 	"pairti-lense/internal/ui"
@@ -19,6 +23,31 @@ func TestTreeClickReplacesTheOpenDocument(t *testing.T) {
 	s.onItem(b)
 	if len(s.docs) != 1 || s.docPath != b.Path || s.buf.Text() != "# Beta\n" {
 		t.Fatalf("docs %d path %q text %q", len(s.docs), s.docPath, s.buf.Text())
+	}
+}
+
+func TestTreeClickShowsShortDocumentAtTop(t *testing.T) {
+	s := testShell()
+	dir := t.TempDir()
+	s.lib = &library.Library{Paths: []string{dir}}
+	s.initWidgets()
+	long := treeNote(t, dir, "long.md", strings.Repeat("Paragraph.\n\n", 100))
+	short := treeNote(t, dir, "short.md", "# Short\n\nVisible\n")
+
+	s.onItem(long)
+	s.scroll.Set(900)
+	s.onItem(long)
+	if got := s.scroll.Get(); got != 900 {
+		t.Fatalf("reselecting the same document moved scroll to %v", got)
+	}
+	s.onItem(short)
+	if got := s.scroll.Get(); got != 0 {
+		t.Fatalf("short document opened with scroll offset %v", got)
+	}
+	size := uitest.LayoutWidget(s.page, 640, 160)
+	s.page.SetBounds(geometry.NewRect(0, 0, size.Width, size.Height))
+	if !drawn(uitest.DrawWidget(s.page), "Visible") {
+		t.Fatal("short document body did not draw")
 	}
 }
 
