@@ -14,3 +14,12 @@ Changed: concept.md, viewer-plan.md
 Synced wiki with updated `doc/concept.md` and `doc/viewer-plan.md` (local desktop MCP agent `document`/`apply_edit` flow, external disk-write reload/reconciliation, and 13-surface viewer verification matrix).
 Created: `wiki/entities/local-agent-mcp.md`.
 Updated: `wiki/overview.md`, `wiki/index.md`, `wiki/entities/lens-editor.md`, `wiki/topics/viewer-verification-plan.md`.
+
+
+## [2026-11-28T11:01:00+11:00] learn
+Reviewed 3 closed beads (`lens-19f`, `lens-3h3`, `lens-zub`).
+- Wiki-worthy: `lens-19f` (Spotlight/LaunchServices duplicate bundle pitfall), `lens-3h3` (macOS launch-to-first-frame benchmarks and per-directory Git ignore batching).
+- Skipped: `lens-zub` (documentation consolidation with no recorded notes/design insights).
+- Git evidence used: commits `864be61` (`internal/doc/list.go`) and `6a9e838` (`Makefile`).
+- Created: `wiki/topics/macos-startup-performance.md`.
+- Updated: `wiki/topics/macos-native-integration.md`, `wiki/entities/library-and-projects.md`, `wiki/index.md`.

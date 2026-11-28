@@ -1,8 +1,8 @@
 ---
 title: macOS Native Integration
 type: topic
-sources: [doc:///concept.md, doc:///viewer-plan.md]
-related: [entities/pairti-lens.md, entities/gogpu.md, entities/library-and-projects.md, entities/lens-editor.md]
+sources: [doc:///concept.md, doc:///viewer-plan.md, beads]
+related: [entities/pairti-lens.md, entities/gogpu.md, entities/library-and-projects.md, entities/lens-editor.md, topics/macos-startup-performance.md]
 updated: 2026-11-28
 ---
 
@@ -32,3 +32,4 @@ updated: 2026-11-28
 - **Rebuilding AppKit menus during render crashes the signed app**: Running `refreshMenu()` inside `Pulse.tick` (render thread) throws an AppKit main-thread exception on cold open in the production bundle, even though standalone tests that drive `OnUpdate` directly pass. Always verify menu refreshes under an actual `Pulse` render frame (`TestReportMenuRefreshAfterRender`) and keep AppKit calls in `OnUpdate`.
 - **Double-handled macOS shortcuts**: GoGPU's Darwin event loop queues both a physical key event and printable text before forwarding the same `NSEvent` to AppKit. Any native menu key equivalent not filtered by `menuInput` will fire twice (once in AppKit, once in `gogpu/ui`).
 - **Demand-driven redraw starvation**: Marking `menusDirty = true` during a draw without requesting a redraw leaves the native menu stale until the next unrelated input event.
+- **Duplicate Spotlight and LaunchServices app bundles**: Copying `build/Lens.app` to `~/Applications/Lens.app` (`cp -R`) during `make app` leaves both bundles discoverable by Spotlight (`mdfind`) and `NSWorkspace`. Moving the signed bundle into place (`mv -f "$(APP)" "$(DEST)"`, tested in `6a9e838`) ensures only `~/Applications/Lens.app` is registered and passes `codesign --verify --deep --strict` across first and repeat installs.

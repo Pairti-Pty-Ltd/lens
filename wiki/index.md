@@ -30,5 +30,6 @@ Catalog of all wiki pages for Pairti Lens.
 - [[Editor Keymap and Modes]] (`topics/editor-keymap-and-modes.md`) — View/Edit modes, motions, operators, text objects, Visual selections, Ex commands, and `Ctrl-W` behavior.
 - [[UI Layout and Surfaces]] (`topics/ui-layout-and-surfaces.md`) — Shared sidebar, tabs, split panes, outline rail, single-line footer, and custom GoGPU surfaces.
 - [[macOS Native Integration]] (`topics/macos-native-integration.md`) — Pure-Go AppKit menus via `goffi`, `OnUpdate` thread ownership, shortcut deduplication, Finder `Open With`, and hierarchical Reports menus.
+- [[macOS Startup Performance]] (`topics/macos-startup-performance.md`) — Native launch-to-first-frame benchmarks, pre-`main` cold-launch overhead, and batched per-directory Git ignore filtering.
 - [[Browser WASM Editor]] (`topics/browser-wasm-editor.md`) — Shared `GOOS=js GOARCH=wasm` Lens shell (`cmd/pairti-lense`), Git-backed library server (`cmd/lens-library`), tracked history/diffs, confined server-side report publishing/preview, Canvas2D paint overlay, and browser-vs-desktop boundaries.
 - [[Report Brand Packs]] (`topics/report-brand-packs.md`) — User-configured `brand.json` report packs under `os.UserConfigDir()/pairti-lense/brands/<id>/`, neutral `default` fallback, and generalized Typst/Pandoc export pipelines.
