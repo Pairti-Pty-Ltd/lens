@@ -79,17 +79,17 @@ type diagramHit struct {
 }
 
 type piece struct {
-	sourceLine, sourceCol      int // position of a formatted text run before its markup is revealed
-	text                       string
-	size                       float32
-	bold, italic, strike, code bool
-	bullet, box, checked       bool
-	pad                        float32 // blank advance, for a hanging indent
-	color                      widget.Color
-	family                     string
-	img                        image.Image
-	imgW, imgH                 float32
-	link                       string
+	sourceLine, sourceCol              int // position of a formatted text run before its markup is revealed
+	text                               string
+	size                               float32
+	bold, italic, strike, code, marked bool
+	bullet, box, checked               bool
+	pad                                float32 // blank advance, for a hanging indent
+	color                              widget.Color
+	family                             string
+	img                                image.Image
+	imgW, imgH                         float32
+	link                               string
 }
 
 type rendered struct {
@@ -101,6 +101,7 @@ type rendered struct {
 	wrap      [][]string  // cell text wrapped to cols
 	figure    bool
 	tableH    float32
+	gridCell  bool
 	tableEnd  bool
 	rule      bool
 	gap       bool
@@ -566,6 +567,11 @@ func (p *Page) advance(canvas widget.Canvas, pc piece) float32 {
 }
 
 func (p *Page) drawPiece(canvas widget.Canvas, pc piece, rect geometry.Rect) {
+	if pc.marked {
+		background := rect
+		background.Max.X-- // text bounds include one extra pixel for the glyph edge
+		canvas.DrawRect(background, mixHex(p.theme.Surface, p.theme.Number, 0.42))
+	}
 	if pc.italic {
 		if styled, ok := canvas.(widget.StyledTextDrawer); ok {
 			styled.DrawStyledText(pc.text, rect, widget.TextStyle{
@@ -1035,6 +1041,9 @@ func (p *Page) layoutOne(b doc.Block, width float32, th theme.Theme) []rendered 
 	if !literal && p.covers(b.Line, b.Line+b.Lines-1) {
 		return p.layoutRaw(b, width)
 	}
+	if b.Kind == "grid" {
+		return p.layoutGrid(b, width)
+	}
 	ink := rgb(th.Ink)
 	muted := rgb(th.Muted)
 	accent := rgb(th.Accent)
@@ -1124,7 +1133,7 @@ func (p *Page) layoutOne(b doc.Block, width float32, th theme.Theme) []rendered 
 			}
 			pieces = append(pieces, piece{
 				text: sp.Text, size: size, bold: bold,
-				italic: sp.Italic, strike: sp.Strike, code: sp.Code,
+				italic: sp.Italic, strike: sp.Strike, marked: sp.Marked, code: sp.Code,
 				color: c, family: fam,
 			})
 		}
@@ -1389,12 +1398,21 @@ func (p *Page) layoutFlow(b doc.Block, spans []doc.Span, width, size, before flo
 			return
 		}
 		if len(cur) > 0 && curW+adv > textW {
-			flush()
+			// Keep punctuation attached when a highlight ends at the margin.
+			last := cur[len(cur)-1]
+			if last.marked && tightPunct(pc.text) && p.pieceWidth(last)+adv <= textW {
+				cur = cur[:len(cur)-1]
+				flush()
+				cur = []piece{last}
+				curW = p.pieceWidth(last)
+			} else {
+				flush()
+			}
 		}
 		cur = append(cur, pc)
 		curW += adv
 	}
-	space := func() {
+	space := func(marked bool) {
 		if len(cur) == 0 {
 			return
 		}
@@ -1402,7 +1420,7 @@ func (p *Page) layoutFlow(b doc.Block, spans []doc.Span, width, size, before flo
 		if last.text == " " {
 			return
 		}
-		pc := piece{text: " ", size: size, color: color, family: face}
+		pc := piece{text: " ", size: size, color: color, family: face, marked: marked && last.marked}
 		if curW+p.pieceWidth(pc) > textW {
 			flush()
 			return
@@ -1420,11 +1438,11 @@ func (p *Page) layoutFlow(b doc.Block, spans []doc.Span, width, size, before flo
 			return
 		}
 		if !tightPunct(text) && !stuckTo(cur, sp.Link) {
-			space()
+			space(sp.Marked)
 		}
 		pc := piece{
 			text: text, size: size, bold: sp.Bold || forceBold,
-			italic: sp.Italic, strike: sp.Strike, code: sp.Code,
+			italic: sp.Italic, strike: sp.Strike, marked: sp.Marked, code: sp.Code,
 			color: color, family: face,
 		}
 		if sp.Code {

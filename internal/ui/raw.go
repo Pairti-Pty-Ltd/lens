@@ -361,7 +361,13 @@ func (p *Page) pointSource(at geometry.Point) (int, int) {
 			}
 			col := ln.col
 			dx := at.X - p.Bounds().Min.X - p.gutterWidth()
-			for _, pc := range ln.pieces {
+			pieces := ln.pieces
+			if ln.gridCell && len(ln.cellLines[0]) > 0 {
+				idx := int((at.Y - y - cellPadY) / (p.theme.Body * proseLead))
+				pieces = ln.cellLines[0][min(max(idx, 0), len(ln.cellLines[0])-1)]
+				dx -= cellPad
+			}
+			for _, pc := range pieces {
 				if pc.sourceLine > 0 {
 					line, col = pc.sourceLine, pc.sourceCol
 				}

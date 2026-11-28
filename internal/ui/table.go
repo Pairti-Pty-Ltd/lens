@@ -4,6 +4,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/gogpu/ui/widget"
+
 	"pairti-lense/internal/doc"
 )
 
@@ -11,7 +13,7 @@ func (p *Page) tableRuns(spans []doc.Span, header bool) []piece {
 	var runs []piece
 	for _, sp := range spans {
 		pc := piece{text: sp.Text, size: p.theme.Body, family: p.theme.UIFont, color: rgb(p.theme.Ink),
-			bold: header || sp.Bold, italic: sp.Italic, strike: sp.Strike, code: sp.Code, link: sp.Link}
+			bold: header || sp.Bold, italic: sp.Italic, strike: sp.Strike, marked: sp.Marked, code: sp.Code, link: sp.Link}
 		if pc.code {
 			pc.family = p.theme.CodeFont
 		}
@@ -114,4 +116,25 @@ func (p *Page) tablePrefix(run piece, text []rune, width float32) int {
 		}
 	}
 	return lo
+}
+
+// Each paragraph flows independently inside the single cell. Keep the
+// document-relative run positions when moving the lines into the table card.
+func (p *Page) layoutGrid(b doc.Block, width float32) []rendered {
+	var lines [][]piece
+	for _, para := range b.GridParagraphs {
+		if len(lines) > 0 {
+			lines = append(lines, nil)
+		}
+		rows := p.layoutFlow(para, para.Spans, width-2*cellPad, p.theme.Body, 0, rgb(p.theme.Ink), strings.HasPrefix(para.Kind, "h"), widget.Color{}, p.theme.UIFont)
+		if p.buf != nil {
+			p.mapFlowSource(rows, para)
+		}
+		for _, row := range rows {
+			lines = append(lines, row.pieces)
+		}
+	}
+	row := rendered{gridCell: true, cols: []float32{width}, cellLines: [][][]piece{lines}, before: 10, num: b.Line, src: b.Line, tableEnd: true}
+	row.tableH = p.rowHeight(row)
+	return []rendered{row}
 }

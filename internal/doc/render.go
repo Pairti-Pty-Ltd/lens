@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"fmt"
 	"regexp"
-	"strings"
-
+	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
@@ -19,7 +19,13 @@ import (
 
 var markdown = goldmark.New(
 	goldmark.WithExtensions(extension.GFM, extension.Footnote),
-	goldmark.WithParserOptions(parser.WithBlockParsers(util.Prioritized(locatedRule{parser.NewThematicBreakParser()}, 199))),
+	goldmark.WithParserOptions(
+		parser.WithBlockParsers(
+			util.Prioritized(gridParser{}, 190),
+			util.Prioritized(locatedRule{parser.NewThematicBreakParser()}, 199),
+		),
+		parser.WithInlineParsers(util.Prioritized(markParser{}, 150)),
+	),
 )
 
 // Goldmark discards the marker after recognizing a rule. Capture its source
@@ -98,6 +104,8 @@ func renderNode(n ast.Node, src []byte, depth int) []Block {
 			return []Block{block("p", []Span{{Text: alt, Link: srcURL, Image: true}}, depth, "", n, src)}
 		}
 		return []Block{codeBlock("html", n, body, "", depth, src)}
+	case *gridCell:
+		return []Block{renderGrid(n)}
 	case *east.Table:
 		return renderTable(n, src)
 	case *east.FootnoteList:
@@ -424,11 +432,13 @@ func linkWiki(spans []Span) []Span {
 		}
 		changed = true
 		for _, part := range splitWiki(sp.Text) {
+			part.Marked = sp.Marked
 			part.Bold = sp.Bold || part.Bold
 			part.Italic = sp.Italic || part.Italic
 			part.Strike = sp.Strike || part.Strike
 			if part.Link == "" && strings.Contains(strings.ToLower(part.Text), "doc:") {
 				for _, d := range splitDocURIs(part.Text) {
+					d.Marked = part.Marked
 					d.Bold = part.Bold
 					d.Italic = part.Italic
 					d.Strike = part.Strike
@@ -471,6 +481,12 @@ func spanNode(n ast.Node, src []byte) []Span {
 		return []Span{{Text: string(n.Value)}}
 	case *ast.CodeSpan:
 		return []Span{{Text: string(n.Text(src)), Code: true}}
+	case *markedText:
+		inner := inlineSpans(n, src)
+		for i := range inner {
+			inner[i].Marked = true
+		}
+		return inner
 	case *ast.Emphasis:
 		inner := inlineSpans(n, src)
 		for i := range inner {
@@ -601,7 +617,7 @@ func mergeSpans(spans []Span) []Span {
 			continue
 		}
 		prev := &out[len(out)-1]
-		if prev.Bold == sp.Bold && prev.Italic == sp.Italic && prev.Code == sp.Code && prev.Strike == sp.Strike && prev.Link == sp.Link && prev.Note == sp.Note {
+		if prev.Marked == sp.Marked && prev.Bold == sp.Bold && prev.Italic == sp.Italic && prev.Code == sp.Code && prev.Strike == sp.Strike && prev.Link == sp.Link && prev.Note == sp.Note {
 			prev.Text += sp.Text
 			continue
 		}
@@ -624,4 +640,126 @@ func rawLines(lines *text.Segments, src []byte) string {
 
 func rawSegments(lines *text.Segments, src []byte) string {
 	return rawLines(lines, src)
+}
+
+// The single-cell Pandoc form has a dashed opening and an equals-sign closing
+// border. Commit the reader only after seeing the complete cell.
+type gridCell struct {
+	ast.BaseBlock
+	body         []byte
+	first, count int
+}
+
+var gridKind = ast.NewNodeKind("PandocGrid")
+
+func (*gridCell) Kind() ast.NodeKind           { return gridKind }
+func (n *gridCell) Dump(src []byte, level int) { ast.DumpHelper(n, src, level, nil, nil) }
+
+type gridParser struct{}
+
+func (gridParser) Trigger() []byte                                             { return []byte{'+'} }
+func (gridParser) CanInterruptParagraph() bool                                 { return true }
+func (gridParser) CanAcceptIndentedLine() bool                                 { return false }
+func (gridParser) Close(ast.Node, text.Reader, parser.Context)                 {}
+func (gridParser) Continue(ast.Node, text.Reader, parser.Context) parser.State { return parser.Close }
+
+func (gridParser) Open(parent ast.Node, r text.Reader, pc parser.Context) (ast.Node, parser.State) {
+	line, _ := r.PeekLine()
+	top := bytes.TrimSpace(line)
+	if len(top) < 5 || top[0] != '+' || top[len(top)-1] != '+' || len(bytes.Trim(top[1:len(top)-1], "-")) != 0 {
+		return nil, parser.NoChildren
+	}
+	first, pos := r.Position()
+	var body bytes.Buffer
+	for {
+		r.AdvanceLine()
+		line, _ = r.PeekLine()
+		row := bytes.TrimSpace(line)
+		if len(row) == len(top) && row[0] == '+' && row[len(row)-1] == '+' && len(bytes.Trim(row[1:len(row)-1], "=")) == 0 && body.Len() > 0 {
+			last, _ := r.Position()
+			return &gridCell{body: body.Bytes(), first: first + 1, count: last - first + 1}, parser.NoChildren
+		}
+		if len(row) < 2 || row[0] != '|' || row[len(row)-1] != '|' {
+			break
+		}
+		body.Write(bytes.TrimSpace(row[1 : len(row)-1]))
+		body.WriteByte('\n')
+	}
+	r.SetPosition(first, pos)
+	return nil, parser.NoChildren
+}
+
+func renderGrid(n *gridCell) Block {
+	cell := Block{Kind: "grid", Line: n.first, Lines: n.count}
+	root := markdown.Parser().Parse(text.NewReader(n.body))
+	cell.GridParagraphs = renderChildren(root, n.body, 0)
+	var paragraphs []string
+	for i := range cell.GridParagraphs {
+		p := &cell.GridParagraphs[i]
+		p.Line += n.first
+		paragraphs = append(paragraphs, p.Text)
+	}
+	cell.Text = strings.Join(paragraphs, "\n\n")
+	return cell
+}
+
+// Let Goldmark parse the contents of a marked span normally, including links
+// and emphasis. Only claim brackets whose matching close has the mark class.
+type markedText struct {
+	ast.BaseInline
+	close, suffix int
+	bottom        *parser.Delimiter
+	outer         *markedText
+}
+
+var markKind = ast.NewNodeKind("PandocMark")
+var openMark = parser.NewContextKey()
+var lastMark = parser.NewContextKey()
+
+func (*markedText) Kind() ast.NodeKind           { return markKind }
+func (n *markedText) Dump(src []byte, level int) { ast.DumpHelper(n, src, level, nil, nil) }
+
+type markParser struct{}
+
+func (markParser) Trigger() []byte { return []byte{'[', ']'} }
+func (markParser) Parse(parent ast.Node, r text.Reader, pc parser.Context) ast.Node {
+	line, pos := r.PeekLine()
+	open, _ := pc.Get(openMark).(*markedText)
+	if line[0] == ']' {
+		if open == nil || open.close != pos.Start || open.Parent() != parent {
+			return nil
+		}
+		parser.ProcessDelimiters(open.bottom, pc)
+		for child := open.NextSibling(); child != nil; child = open.NextSibling() {
+			open.AppendChild(open, child)
+		}
+		parent.RemoveChild(parent, open)
+		pc.Set(openMark, open.outer)
+		r.Advance(1 + open.suffix)
+		return open
+	}
+	// Ordinary Markdown should not scan ahead for every opening bracket.
+	last := pc.ComputeIfAbsent(lastMark, func() any { return bytes.LastIndex(r.Source(), []byte(".mark")) }).(int)
+	if pos.Start >= last {
+		return nil
+	}
+	l, start := r.Position()
+	r.Advance(1)
+	_, ok := r.FindClosure('[', ']', text.FindClosureOptions{Nesting: true, CodeSpan: true, Newline: true, Advance: true})
+	if !ok {
+		return nil
+	}
+	suffix, end := r.PeekLine()
+	if len(suffix) == 0 || suffix[0] != '{' {
+		return nil
+	}
+	stop := bytes.IndexByte(suffix, '}')
+	if stop < 0 || !slices.Contains(strings.Fields(string(suffix[1:stop])), ".mark") {
+		return nil
+	}
+	mark := &markedText{close: end.Start - 1, suffix: stop + 1, bottom: pc.LastDelimiter(), outer: open}
+	pc.Set(openMark, mark)
+	r.SetPosition(l, start)
+	r.Advance(1)
+	return mark
 }

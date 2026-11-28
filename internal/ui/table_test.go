@@ -1,8 +1,11 @@
 package ui
 
 import (
+	"os"
 	"strings"
 	"testing"
+
+	"github.com/gogpu/ui/geometry"
 
 	"pairti-lense/internal/doc"
 	"pairti-lense/internal/edit"
@@ -61,5 +64,68 @@ func TestTableWrapKeepsLongUnicodeWords(t *testing.T) {
 	}
 	if len(lines) < 2 || got.String() != text {
 		t.Fatalf("wrapped into %d lines: %q", len(lines), got.String())
+	}
+}
+
+func TestPandocGridResizeAndReveal(t *testing.T) {
+	src, err := os.ReadFile("../../testdata/orchard-grid.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := NewPage()
+	p.SetBlocks(doc.Blocks(src))
+	p.UseBuffer(edit.New(string(src)))
+	for _, width := range []float32{640, 210} {
+		c := drawPage(p, width, 1200)
+		if len(c.StrokeRoundRects) != 2 {
+			t.Fatalf("width %v: %d cards", width, len(c.StrokeRoundRects))
+		}
+		for _, word := range []string{"North", "South", "•", "gate", "map", "Field", "date"} {
+			if !hasGlyph(glyphs(c), word) {
+				t.Fatalf("missing %s at %v: %+v", word, width, glyphs(c))
+			}
+		}
+		for _, g := range glyphs(c) {
+			if strings.ContainsAny(g.text, "|{}+") || ((g.text == "North" || g.text == "South") && !g.bold) {
+				t.Fatalf("unexpected glyph %+v", g)
+			}
+		}
+		if glyphY(c, "•")-glyphY(c, "North") < 2*p.theme.Body*proseLead-1 {
+			t.Fatal("missing paragraph gap")
+		}
+		mark := mixHex(p.theme.Surface, p.theme.Number, 0.42)
+		for _, word := range []string{"field", "note", "Follow", "shed", "date", ","} {
+			box := glyphBox(c, word)
+			point := geometry.Pt(box.Min.X+1, box.Min.Y+1)
+			covered := false
+			for _, r := range c.Rects {
+				if r.Color == mark && r.Bounds.Contains(point) {
+					covered = true
+					break
+				}
+			}
+			if covered != (word != ",") {
+				t.Fatalf("width %v glyph %q highlight %v", width, word, covered)
+			}
+		}
+		if width == 210 && glyphY(c, "shed") <= glyphY(c, "Follow") {
+			t.Fatal("marked passage did not wrap")
+		}
+		for _, hit := range p.hits {
+			if hit.rect.Max.X > width {
+				t.Fatalf("clipped link: %+v", hit)
+			}
+		}
+		if len(p.hits) != 2 {
+			t.Fatalf("links: %+v", p.hits)
+		}
+	}
+	box := glyphBox(drawPage(p, 210, 1200), "date")
+	if !p.openAt(nil, geometry.Pt(box.Min.X+1, box.Min.Y+1)) || p.openLine != 16 {
+		t.Fatalf("source line %d", p.openLine)
+	}
+	drawPage(p, 210, 1200)
+	if p.Buffer().Text() != string(src) {
+		t.Fatal("revealing source changed Markdown")
 	}
 }

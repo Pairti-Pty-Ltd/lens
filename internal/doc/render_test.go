@@ -1,6 +1,7 @@
 package doc
 
 import (
+	"os"
 	"strings"
 	"testing"
 )
@@ -228,5 +229,42 @@ plate
 	}
 	if len(got["html"]) != 1 || !strings.Contains(got["html"][0].Text, "raw") {
 		t.Fatalf("html = %+v", got["html"])
+	}
+}
+
+func TestPandocGridDocument(t *testing.T) {
+	src, err := os.ReadFile("../../testdata/orchard-grid.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	blocks := Blocks(src)
+	if len(blocks) != 4 || blocks[1].Kind != "grid" || blocks[2].Kind != "grid" || blocks[3].Kind != "h1" {
+		t.Fatalf("unexpected blocks: %+v", blocks)
+	}
+	for i, start := range []int{3, 11} {
+		b := blocks[i+1]
+		if b.Line != start || b.Lines != 8-i || len(b.GridParagraphs) != 3 {
+			t.Fatalf("grid %d: %+v", i, b)
+		}
+		title, bullet, body := b.GridParagraphs[0], b.GridParagraphs[1], b.GridParagraphs[2]
+		if !title.Spans[0].Bold || title.Line != start+1 || bullet.Line != start+3 || !strings.HasPrefix(bullet.Text, "• ") || bullet.Spans[1].Link == "" || body.Line != start+5 {
+			t.Fatalf("paragraphs: %+v", b.GridParagraphs)
+		}
+	}
+	if blocks[1].GridParagraphs[2].Text != "Follow the gravel path past the old pear trees to the shed." || blocks[3].Line != 19 || !blocks[0].Spans[1].Marked {
+		t.Fatalf("source or mark: %+v", blocks)
+	}
+}
+
+func TestPandocMarkKeepsInlineStylesAndPunctuation(t *testing.T) {
+	b := Blocks([]byte("A [**bright** [leaf](leaf.md)]{.extra .mark}, `[literal]{.mark}` [plain]{.other}."))[0]
+	if b.Text != "A bright leaf, [literal]{.mark} [plain]{.other}." {
+		t.Fatal(b.Text)
+	}
+	for _, sp := range b.Spans {
+		want := sp.Text == "bright" || sp.Text == "leaf" || sp.Text == " "
+		if sp.Marked != want || sp.Bold != (sp.Text == "bright") || (sp.Link == "leaf.md") != (sp.Text == "leaf") {
+			t.Fatalf("styles: %+v", b.Spans)
+		}
 	}
 }

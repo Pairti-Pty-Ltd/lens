@@ -43,6 +43,7 @@ type Span struct {
 	Italic bool
 	Code   bool
 	Strike bool
+	Marked bool
 	Link   string
 	Image  bool
 	Note   bool // a footnote reference, drawn smaller than the sentence
@@ -54,16 +55,17 @@ type Span struct {
 // Line is the 1-based source line. Lines is how many source lines the block covers.
 // A following row with Line 0 belongs to the same source range (a table body row).
 type Block struct {
-	Kind      string
-	Text      string
-	Spans     []Span
-	Cells     []string // table row, one entry per column
-	CellSpans [][]Span // inline Markdown in each table cell
-	CellLinks []string // wiki or other link for that column, or ""
-	Depth     int
-	Marker    string
-	Line      int
-	Lines     int
+	Kind           string
+	Text           string
+	Spans          []Span
+	Cells          []string // table row, one entry per column
+	CellSpans      [][]Span // inline Markdown in each table cell
+	GridParagraphs []Block  // one-column Pandoc cell, with document-relative lines
+	CellLinks      []string // wiki or other link for that column, or ""
+	Depth          int
+	Marker         string
+	Line           int
+	Lines          int
 }
 
 // TooLargeError is returned when a file is over MaxBytes.
