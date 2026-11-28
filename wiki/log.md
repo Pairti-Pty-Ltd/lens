@@ -23,3 +23,10 @@ Reviewed 3 closed beads (`lens-19f`, `lens-3h3`, `lens-zub`).
 - Git evidence used: commits `864be61` (`internal/doc/list.go`) and `6a9e838` (`Makefile`).
 - Created: `wiki/topics/macos-startup-performance.md`.
 - Updated: `wiki/topics/macos-native-integration.md`, `wiki/entities/library-and-projects.md`, `wiki/index.md`.
+
+
+## [2026-11-28T16:02:00+11:00] learn
+Reviewed 1 closed bead (`lens-idf`).
+- Wiki-worthy: `lens-idf` (custom Goldmark parsers for single-column Pandoc grid cells and `[...]{.mark}` spans, preserving document-relative source positions and Formatted-view highlight/wrap behavior).
+- Git evidence used: commit `345e4d1` (`internal/doc/doc.go`, `internal/doc/render.go`, `internal/ui/page.go`, `internal/ui/table.go`).
+- Updated: `wiki/entities/goldmark-and-markdown.md`.
