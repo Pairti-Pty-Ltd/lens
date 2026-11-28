@@ -37,3 +37,10 @@ Reviewed 2 closed beads (`lens-ckd`, `lens-ry4`).
 - Wiki-worthy: `lens-ckd` (continuous multi-paragraph blockquote panels keyed by `Block.QuoteLine`, plus `quotePad` parity in `pointSource`/`moveScreen`), `lens-ry4` (source-whitespace `word`/`gap` wrapping across inline span boundaries replacing `tightPunct`/`stuckTo`, and unified `pieceWidth` advance measurement between layout and `Draw`).
 - Git evidence used: commit `e366827` (`internal/doc/doc.go`, `internal/doc/render.go`, `internal/ui/page.go`, `internal/ui/raw.go`).
 - Updated: `wiki/entities/goldmark-and-markdown.md`, `wiki/topics/ui-layout-and-surfaces.md`.
+
+
+## [2026-11-28T17:02:00+11:00] learn
+Reviewed 1 closed bead (`lens-4m9`).
+- Wiki-worthy: `lens-4m9` (multi-column Pandoc grid table parsing via `uniseg` display-width column slicing in `gridFields`, `Block.GridRows`, newline-splitting in `wrapTableRuns`, and `r.Line == 0` guards in `layoutTable`/`figureRow`).
+- Git evidence used: commit `240b8ff` (`internal/doc/doc.go`, `internal/doc/render.go`, `internal/ui/page.go`, `internal/ui/table.go`).
+- Updated: `wiki/entities/goldmark-and-markdown.md`.

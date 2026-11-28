@@ -24,17 +24,20 @@ updated: 2026-11-28
 ## How It Works
 `internal/doc` parses Markdown bytes with Goldmark into structured blocks that `internal/ui` draws onto the document surface, while [[Lens Editor]] edits the underlying Markdown text directly so Raw and Formatted views stay synchronized without lossy HTML round-trips.
 
-## Custom Goldmark Extensions (Pandoc Grid Cells & Marked Spans)
-Added in `lens-idf` to render Word documents converted by Pandoc without leaking ASCII borders or highlight markup in Formatted view:
-- **Single-column Pandoc grid cells (`gridParser`, priority 190 in `internal/doc/render.go`)**:
-  - Matches a dashed top border (`+---+`), `| ... |` body rows, and an equals-sign bottom border (`+===+`), committing the reader only after seeing the complete closing border (rewinding with `r.SetPosition` otherwise so non-matching `+` lines fall back cleanly).
-  - Recursively parses the stripped cell body with Goldmark into `Block.GridParagraphs` (`internal/doc/doc.go`) and offsets each child block's `Line` by the cell's opening line so Formatted-view source mapping (`mapFlowSource` in `internal/ui/table.go`) stays document-relative.
-  - `layoutGrid` (`internal/ui/table.go`) wraps each paragraph independently via `layoutFlow` inside a single-column table card (`gridCell: true`).
+## Custom Goldmark Extensions (Pandoc Grid Tables & Marked Spans)
+Added in `lens-idf` and extended in `lens-4m9` to render Word documents converted by Pandoc without leaking ASCII borders or highlight markup in Formatted view:
+- **Single- and multi-column Pandoc grid tables (`gridParser`, priority 190 in `internal/doc/render.go`)**:
+  - Derives column widths from the opening dashed border (`+---+` or `+---+---+`), recognizes equals-sign header separators (`+===+`) and dashed row separators, and commits the reader only after seeing a complete closing border (rewinding with `r.SetPosition` otherwise so non-matching `+` lines fall back cleanly). Single-column cards still terminate at their equals border (`len(columns) == 1 && row.header`) so adjacent one-column cards stay separate.
+  - **Column slicing with `uniseg` (`gridFields`)**: only `|` delimiters at the exact opening-border column display widths split cells; `github.com/rivo/uniseg` (`FirstGraphemeClusterInString`) tracks grapheme display width so cells containing literal pipes or multibyte characters do not misalign or split.
+  - Assembles each cell's lines independently before parsing with Goldmark:
+    - Single-row, single-column grids populate `Block.GridParagraphs` (`internal/doc/doc.go`) with document-relative `Line` offsets for `layoutGrid` / `mapFlowSource` (`internal/ui/table.go`).
+    - Multi-column (or multi-row) grids populate `Block.GridRows` (`th`/`tr` rows with explicit `Line: raw.first`), joining multi-paragraph cell spans with `Span{Text: "\n\n"}` in `row.CellSpans`.
+  - **Table layout & `Line == 0` guard (`internal/ui/page.go`, `internal/ui/table.go`)**: `layoutOne` routes `len(b.GridRows) > 0` to `layoutTable`; `wrapTableRuns` splits runs on `\n` so multi-paragraph cells wrap within their column and size each row to its tallest cell. Because grid rows carry explicit `r.Line` values (unlike GFM body rows where `Line == 0`), `layoutTable` only synthesizes `ln.src = rows[0].Line + i + 1` when `r.Line == 0`, and `figureRow` rejects `rows[1].Line != 0` so two-row Pandoc grid tables are not misclassified as GFM figure rows.
 - **Pandoc bracketed mark spans (`markParser`, priority 150 in `internal/doc/render.go`)**:
   - Recognizes `[text]{.mark}` both inside and outside tables while letting Goldmark parse nested inline syntax (links, emphasis) via `parser.ProcessDelimiters`, propagating `Span.Marked` through `linkWiki` and `mergeSpans`.
   - Caches `bytes.LastIndex(r.Source(), []byte(".mark"))` on `parser.Context` so ordinary Markdown files avoid lookahead scans on every `[` bracket.
   - In `internal/ui/page.go`, `drawPiece` paints a highlight rect behind marked runs (trimming `Max.X--` for the glyph-edge pixel), `layoutFlow` keeps trailing tight punctuation attached when a highlight ends at the margin, and inter-word spaces are marked only when both adjacent pieces are marked.
-- **Regression fixture**: `testdata/orchard-grid.md` covers consecutive one-column Pandoc grid tables with multi-paragraph cells and `.mark` spans.
+- **Regression fixtures**: `testdata/orchard-grid.md` (consecutive one-column Pandoc grid cards with multi-paragraph cells and `.mark` spans) and `testdata/directory-grid.md` (two-column directory grid table).
 
 ## Formatted View Blockquote Panels & Inline Spacing
 Added in `lens-ckd` and `lens-ry4` for faithful Markdown rendering in `internal/doc/render.go` and `internal/ui/page.go`:
