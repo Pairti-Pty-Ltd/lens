@@ -27,6 +27,7 @@ updated: 2026-11-28
 ## Decisions & Tradeoffs
 - **Custom tree and split surfaces**: Replacing `gogpu/ui`'s built-in tree and split widgets fixed hit testing and window resize behavior while keeping the pure-Go stack.
 - **Heading navigation lives in the outline rail, not tab strips** (`lens-c8t`): Section breadcrumbs and disclosure controls were removed from both document tab strips (`internal/ui/tabs.go`, `cmd/pairti-lense/main_docs.go`, and `Rail.SectionName` in `internal/ui/rail.go`). Tab strips render only open document tabs; heading navigation belongs exclusively in the right-hand Table of contents panel.
+- **Formatted blockquote inset & inline advance parity** (`lens-ckd`, `lens-ry4`): Multi-paragraph blockquotes render as one continuous inset panel keyed by `Block.QuoteLine` (with `quotePad` mirrored in `internal/ui/raw.go` hit-testing and `moveScreen`), and `layoutFlow`/`Draw` in `internal/ui/page.go` preserve source whitespace across inline span boundaries while sharing `p.pieceWidth` for layout and painting. See [[Goldmark and Markdown]].
 
 ## See Also
 - [[GoGPU]]

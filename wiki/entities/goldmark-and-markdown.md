@@ -36,6 +36,18 @@ Added in `lens-idf` to render Word documents converted by Pandoc without leaking
   - In `internal/ui/page.go`, `drawPiece` paints a highlight rect behind marked runs (trimming `Max.X--` for the glyph-edge pixel), `layoutFlow` keeps trailing tight punctuation attached when a highlight ends at the margin, and inter-word spaces are marked only when both adjacent pieces are marked.
 - **Regression fixture**: `testdata/orchard-grid.md` covers consecutive one-column Pandoc grid tables with multi-paragraph cells and `.mark` spans.
 
+## Formatted View Blockquote Panels & Inline Spacing
+Added in `lens-ckd` and `lens-ry4` for faithful Markdown rendering in `internal/doc/render.go` and `internal/ui/page.go`:
+- **Continuous blockquote inset panels (`lens-ckd`)**:
+  - `renderQuote` (`internal/doc/render.go`) stamps `Block.QuoteLine` (`internal/doc/doc.go`) with the blockquote's first content line on all child blocks (excluding GitHub alert callouts), preserving quote identity across multi-paragraph passages and separating consecutive blockquotes.
+  - `layoutBlocks` (`internal/ui/page.go`) propagates `QuoteLine` onto both block rows and inter-paragraph gap rows between blocks sharing the same `QuoteLine`, narrowing inner layout width by `2*quotePad` (`10px`). `Draw` paints one continuous tinted background (`mixHex(Canvas, Ink, 0.07)`) and 2px left rule across the entire contiguous `quoteLine` span.
+  - **Hit-testing & cursor pitfall**: `pointSource` and `moveScreen` in `internal/ui/raw.go` must mirror `quotePad` (offsetting click `dx` by `quotePad` and narrowing `moveScreen` row width by `2*quotePad`) so caret placement and vertical motion align with inset quote lines.
+  - Regression fixture: `testdata/cedar-interview.md` (`TestQuotePanelSpansThePassage` at 310px/950px in light and dark palettes).
+- **Source whitespace & advance parity across inline spans (`lens-ry4`)**:
+  - `layoutFlow` (`internal/ui/page.go`) replaced `strings.Fields` + synthetic-space heuristics (`tightPunct`, `stuckTo`) with explicit `gap` (whitespace ` \t`) and `word` (non-whitespace) buffers scanned directly from source spans. Adjacent non-whitespace pieces across span boundaries (e.g. `` (`identifier`) `` or inline code meeting punctuation) accumulate into one `word` and wrap together while keeping each piece's resolved font and color.
+  - `Draw` now uses `p.pieceWidth(pc)` directly (removing the separate `p.advance` helper) so layout wrapping and painting always share identical glyph advances across proportional prose and monospace code faces.
+  - Regression coverage: `TestInlineCodeSpacing` (`internal/ui/page_test.go`) across paragraphs and blockquotes at 265px/850px and 100%/150% type scale.
+
 ## Relationships
 - Parsed blocks are rendered in [[UI Layout and Surfaces]].
 - Edited in place via [[Lens Editor]].
