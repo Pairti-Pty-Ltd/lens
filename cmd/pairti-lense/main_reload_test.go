@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gogpu/ui/event"
 	"github.com/gogpu/ui/geometry"
@@ -19,6 +20,7 @@ import (
 	"pairti-lense/internal/library"
 	"pairti-lense/internal/theme"
 	"pairti-lense/internal/ui"
+	"pairti-lense/internal/watch"
 )
 
 func testShell() *shell {
@@ -419,6 +421,77 @@ func TestCleanDiskWriteReloads(t *testing.T) {
 	}
 }
 
+func TestReloadThenEditInRaw(t *testing.T) {
+	src, err := os.ReadFile("../../testdata/membrane-assay.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const heading = "Revised"
+	external := "# " + heading + "\n" + strings.SplitN(string(src), "\n", 2)[1]
+	for _, action := range []string{"direct", "preview click", "tab switch"} {
+		t.Run(action, func(t *testing.T) {
+			s := testShell()
+			s.page.SetInline(func() { s.notePage(0) }, s.saveDoc, s.runCmd)
+			s.editor.SetActivate(func() { s.notePage(0) })
+			w, err := watch.New(nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer w.Close()
+			s.watch = w
+			path := openNote(t, s, string(src))
+			if err := os.WriteFile(path, []byte(external), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			ctx := uitest.NewMockContext()
+			deadline := time.Now().Add(5 * time.Second)
+			for headingText(s.page.Outline()) != heading {
+				if time.Now().After(deadline) {
+					t.Fatal("external heading did not appear in Formatted")
+				}
+				time.Sleep(10 * time.Millisecond)
+				s.tick(ctx)
+			}
+			uitest.LayoutWidget(s.page, 640, 600)
+			s.page.SetBounds(geometry.NewRect(0, 0, 640, 600))
+			canvas := uitest.DrawWidget(s.page)
+			if !drawn(canvas, heading) && !drawn(canvas, " "+heading) {
+				t.Fatal("Formatted did not draw the revised heading")
+			}
+			switch action {
+			case "preview click":
+				if !uitest.SimulateClick(s.page, 48, 12) {
+					t.Fatal("preview click missed the note")
+				}
+			case "tab switch":
+				openNote(t, s, "# Other note\n")
+				s.showPane(0, 0)
+			}
+			s.pick("Raw")
+			if got := s.editor.Buffer().Text(); got != external {
+				t.Fatal("Raw opened the previous revision")
+			}
+			s.editor.SetBounds(geometry.NewRect(0, 0, 640, 600))
+			if !uitest.SimulateClick(s.editor, 50, 8) {
+				t.Fatal("Raw click missed the editor")
+			}
+			pos := s.editor.Buffer().Cursor()
+			for _, key := range []*event.KeyEvent{uitest.KeyType(event.KeyI, 'i', 0), uitest.KeyType(event.KeyX, 'x', 0)} {
+				if !s.editor.Event(nil, key) {
+					t.Fatal("Raw did not handle edit")
+				}
+			}
+			s.pick("Save")
+			reopened := testShell()
+			reopened.open(ui.Item{Path: path, Rel: filepath.Base(path), ProjectRoot: filepath.Dir(path)})
+			want := external[:pos] + "x" + external[pos:]
+			if reopened.buf.Text() != want {
+				t.Fatal("reopened note did not contain the external revision plus the Raw edit")
+			}
+		})
+	}
+}
+
 func TestDirtyDiskWriteAsks(t *testing.T) {
 	s := testShell()
 	openNote(t, s, "# A\n")
@@ -440,6 +513,14 @@ func TestDirtyDiskWriteAsks(t *testing.T) {
 	if s.pending != "" || !strings.HasPrefix(s.buf.Text(), "x") || s.line3.Get() != "Unsaved" {
 		t.Fatalf("after ours text %q line %q", s.buf.Text(), s.line3.Get())
 	}
+	s.pick("Raw")
+	if got := s.editor.Buffer().Text(); got != "x# A\n" {
+		t.Fatalf("Ours in Raw: %q", got)
+	}
+	s.pick("Formatted")
+	if got := s.page.Buffer().Text(); got != "x# A\n" {
+		t.Fatalf("Ours in Formatted: %q", got)
+	}
 	if s.onDisk("# B\n") {
 		t.Fatal("dismissed disk text asked again")
 	}
@@ -449,6 +530,13 @@ func TestDirtyDiskWriteAsks(t *testing.T) {
 	s.pick("Theirs")
 	if s.buf.Text() != "# C\n" || s.buf.Dirty() || s.line3.Get() != "Formatted" {
 		t.Fatalf("theirs text %q dirty %v line %q", s.buf.Text(), s.buf.Dirty(), s.line3.Get())
+	}
+	if got := s.page.Buffer().Text(); got != "# C\n" {
+		t.Fatalf("Theirs in Formatted: %q", got)
+	}
+	s.pick("Raw")
+	if got := s.editor.Buffer().Text(); got != "# C\n" {
+		t.Fatalf("Theirs in Raw: %q", got)
 	}
 }
 

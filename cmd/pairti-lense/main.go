@@ -1128,6 +1128,7 @@ func (s *shell) publish(text, status string) {
 	blocks := doc.Render(s.docPath, []byte(text))
 	if page := s.currentPage(); page != nil {
 		line := page.OpenLine()
+		page.UseBuffer(s.buf)
 		page.SetPath(s.docPath)
 		page.SetSource(filepath.Dir(s.docPath), blocks)
 		s.parkCaret(page, line)
