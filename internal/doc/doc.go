@@ -62,6 +62,7 @@ type Block struct {
 	CellSpans      [][]Span // inline Markdown in each table cell
 	QuoteLine      int      // first content line of the containing blockquote, zero outside
 	GridParagraphs []Block  // one-column Pandoc cell, with document-relative lines
+	GridRows       []Block  // rows of a multi-column Pandoc table
 	CellLinks      []string // wiki or other link for that column, or ""
 	Depth          int
 	Marker         string

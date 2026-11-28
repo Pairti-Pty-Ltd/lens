@@ -16,6 +16,7 @@ require (
 	github.com/gogpu/systray v0.3.0
 	github.com/gogpu/ui v0.1.55
 	github.com/modelcontextprotocol/go-sdk v1.8.0
+	github.com/rivo/uniseg v0.4.7
 	github.com/yuin/goldmark v1.7.13
 	golang.org/x/image v0.47.0
 )
@@ -44,7 +45,6 @@ require (
 	github.com/lucasb-eyer/go-colorful v1.4.0 // indirect
 	github.com/mattn/go-runewidth v0.0.23 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
-	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/segmentio/asm v1.1.3 // indirect
 	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect

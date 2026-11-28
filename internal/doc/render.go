@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/rivo/uniseg"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/extension"
@@ -644,11 +645,15 @@ func rawSegments(lines *text.Segments, src []byte) string {
 	return rawLines(lines, src)
 }
 
-// The single-cell Pandoc form has a dashed opening and an equals-sign closing
-// border. Commit the reader only after seeing the complete cell.
+type gridRow struct {
+	cells  []strings.Builder
+	first  int // first content line, one-based
+	header bool
+}
+
 type gridCell struct {
 	ast.BaseBlock
-	body         []byte
+	rows         []gridRow
 	first, count int
 }
 
@@ -668,41 +673,128 @@ func (gridParser) Continue(ast.Node, text.Reader, parser.Context) parser.State {
 func (gridParser) Open(parent ast.Node, r text.Reader, pc parser.Context) (ast.Node, parser.State) {
 	line, _ := r.PeekLine()
 	top := bytes.TrimSpace(line)
-	if len(top) < 5 || top[0] != '+' || top[len(top)-1] != '+' || len(bytes.Trim(top[1:len(top)-1], "-")) != 0 {
+	if len(top) < 5 || top[0] != '+' || top[len(top)-1] != '+' {
 		return nil, parser.NoChildren
 	}
-	first, pos := r.Position()
-	var body bytes.Buffer
-	for {
-		r.AdvanceLine()
-		line, _ = r.PeekLine()
-		row := bytes.TrimSpace(line)
-		if len(row) == len(top) && row[0] == '+' && row[len(row)-1] == '+' && len(bytes.Trim(row[1:len(row)-1], "=")) == 0 && body.Len() > 0 {
-			last, _ := r.Position()
-			return &gridCell{body: body.Bytes(), first: first + 1, count: last - first + 1}, parser.NoChildren
+	columns := strings.Split(string(top[1:len(top)-1]), "+")
+	for _, col := range columns {
+		if len(col) == 0 || strings.Trim(col, "-") != "" {
+			return nil, parser.NoChildren
 		}
-		if len(row) < 2 || row[0] != '|' || row[len(row)-1] != '|' {
+	}
+	header := bytes.ReplaceAll(top, []byte("-"), []byte("="))
+	first, pos := r.Position()
+	grid := &gridCell{first: first + 1}
+	r.AdvanceLine()
+	for {
+		start, _ := r.Position()
+		row := gridRow{first: start + 1, cells: make([]strings.Builder, len(columns))}
+		for {
+			line, _ = r.PeekLine()
+			cells := gridFields(bytes.TrimSpace(line), columns)
+			if cells == nil {
+				break
+			}
+			for i, cell := range cells {
+				row.cells[i].WriteString(strings.TrimSpace(cell))
+				row.cells[i].WriteByte('\n')
+			}
+			r.AdvanceLine()
+		}
+		last, borderPos := r.Position()
+		border := bytes.TrimSpace(line)
+		row.header = bytes.Equal(border, header)
+		if last == start || (!row.header && !bytes.Equal(border, top)) {
 			break
 		}
-		body.Write(bytes.TrimSpace(row[1 : len(row)-1]))
-		body.WriteByte('\n')
+		grid.rows = append(grid.rows, row)
+		grid.count = last - first + 1
+		// Adjacent single-cell cards end at their equals border.
+		if len(columns) == 1 && row.header {
+			return grid, parser.NoChildren
+		}
+		r.AdvanceLine()
+		next, _ := r.PeekLine()
+		if gridFields(bytes.TrimSpace(next), columns) == nil {
+			r.SetPosition(last, borderPos)
+			return grid, parser.NoChildren
+		}
 	}
 	r.SetPosition(first, pos)
 	return nil, parser.NoChildren
 }
 
-func renderGrid(n *gridCell) Block {
-	cell := Block{Kind: "grid", Line: n.first, Lines: n.count}
-	root := markdown.Parser().Parse(text.NewReader(n.body))
-	cell.GridParagraphs = renderChildren(root, n.body, 0)
-	var paragraphs []string
-	for i := range cell.GridParagraphs {
-		p := &cell.GridParagraphs[i]
-		p.Line += n.first
-		paragraphs = append(paragraphs, p.Text)
+// Only pipes on opening-border columns delimit cells. A label can contain
+// literal pipes or multibyte characters.
+func gridFields(line []byte, columns []string) []string {
+	if len(line) < 2 || line[0] != '|' || line[len(line)-1] != '|' {
+		return nil
 	}
-	cell.Text = strings.Join(paragraphs, "\n\n")
-	return cell
+	if len(columns) == 1 {
+		return []string{string(line[1 : len(line)-1])}
+	}
+	rest := string(line[1:])
+	cells := make([]string, 0, len(columns))
+	for _, col := range columns {
+		width := 0
+		end := 0
+		for end < len(rest) && !(width == len(col) && rest[end] == '|') {
+			cluster, _, w, _ := uniseg.FirstGraphemeClusterInString(rest[end:], -1)
+			width += w
+			if width > len(col) {
+				return nil
+			}
+			end += len(cluster)
+		}
+		if end == len(rest) {
+			return nil
+		}
+		cells = append(cells, rest[:end])
+		rest = rest[end+1:]
+	}
+	if rest != "" {
+		return nil
+	}
+	return cells
+}
+
+func renderGrid(n *gridCell) Block {
+	grid := Block{Kind: "grid", Line: n.first, Lines: n.count}
+	var rows []string
+	for _, raw := range n.rows {
+		row := Block{Kind: "tr", Line: raw.first}
+		if raw.header {
+			row.Kind = "th"
+		}
+		for i := range raw.cells {
+			body := []byte(raw.cells[i].String())
+			root := markdown.Parser().Parse(text.NewReader(body))
+			paragraphs := renderChildren(root, body, 0)
+			var spans []Span
+			for j := range paragraphs {
+				p := &paragraphs[j]
+				p.Line += raw.first - 1
+				if j > 0 {
+					spans = append(spans, Span{Text: "\n\n"})
+				}
+				spans = append(spans, p.Spans...)
+				if len(p.Spans) == 0 {
+					spans = append(spans, Span{Text: p.Text})
+				}
+			}
+			if len(n.rows) == 1 && len(raw.cells) == 1 {
+				grid.GridParagraphs = paragraphs
+				grid.Text = plainSpans(spans)
+				return grid
+			}
+			row.CellSpans = append(row.CellSpans, spans)
+			row.Cells = append(row.Cells, plainSpans(spans))
+		}
+		grid.GridRows = append(grid.GridRows, row)
+		rows = append(rows, strings.Join(row.Cells, " | "))
+	}
+	grid.Text = strings.Join(rows, "\n")
+	return grid
 }
 
 // Let Goldmark parse the contents of a marked span normally, including links

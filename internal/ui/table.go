@@ -50,44 +50,49 @@ func (p *Page) wrapTableRuns(runs []piece, width float32) [][]piece {
 			used += p.pieceWidth(run)
 			continue
 		}
-		text := []rune(run.text)
-		for len(text) > 0 {
-			if len(line) == 0 {
-				for len(text) > 0 && (text[0] == ' ' || text[0] == '\t') {
-					text = text[1:]
-				}
+		for i, part := range strings.Split(run.text, "\n") {
+			if i > 0 {
+				flush()
 			}
-			if len(text) == 0 {
-				break
-			}
-			end := p.tablePrefix(run, text, width-used)
-			if end < len(text) && (end == 0 || text[end] != ' ') {
-				found := false
-				for i, ch := range slices.Backward(text[:end]) {
-					if ch == ' ' || ch == '\t' {
-						end = i + 1
-						found = true
-						break
+			text := []rune(part)
+			for len(text) > 0 {
+				if len(line) == 0 {
+					for len(text) > 0 && (text[0] == ' ' || text[0] == '\t') {
+						text = text[1:]
 					}
 				}
-				if !found && len(line) > 0 {
-					flush()
-					continue
+				if len(text) == 0 {
+					break
 				}
-			}
-			end = max(1, end)
-			pc := run
-			pc.text = string(text[:end])
-			text = text[end:]
-			if len(text) > 0 {
-				pc.text = strings.TrimRight(pc.text, " \t")
-			}
-			if pc.text != "" {
-				line = append(line, pc)
-				used += p.pieceWidth(pc)
-			}
-			if len(text) > 0 && len(line) > 0 {
-				flush()
+				end := p.tablePrefix(run, text, width-used)
+				if end < len(text) && (end == 0 || text[end] != ' ') {
+					found := false
+					for i, ch := range slices.Backward(text[:end]) {
+						if ch == ' ' || ch == '\t' {
+							end = i + 1
+							found = true
+							break
+						}
+					}
+					if !found && len(line) > 0 {
+						flush()
+						continue
+					}
+				}
+				end = max(1, end)
+				pc := run
+				pc.text = string(text[:end])
+				text = text[end:]
+				if len(text) > 0 {
+					pc.text = strings.TrimRight(pc.text, " \t")
+				}
+				if pc.text != "" {
+					line = append(line, pc)
+					used += p.pieceWidth(pc)
+				}
+				if len(text) > 0 && len(line) > 0 {
+					flush()
+				}
 			}
 		}
 	}

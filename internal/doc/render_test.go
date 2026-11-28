@@ -268,3 +268,34 @@ func TestPandocMarkKeepsInlineStylesAndPunctuation(t *testing.T) {
 		}
 	}
 }
+
+func TestPandocDirectoryCells(t *testing.T) {
+	src, err := os.ReadFile("../../testdata/directory-grid.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	blocks := Blocks(src)
+	if len(blocks) != 3 || blocks[1].Line != 3 || blocks[1].Lines != 11 || blocks[2].Text != "Directory ends here." {
+		t.Fatalf("table boundary: %+v", blocks)
+	}
+	rows := blocks[1].GridRows
+	want := [][2]string{{"Field station", "Contact"}, {"Alder", "The field office handles trail maps and visitor permits.\n\nSee the guide."}, {"Birch", "Call the desk."}}
+	if len(rows) != len(want) {
+		t.Fatalf("got %d rows", len(rows))
+	}
+	for i, row := range rows {
+		if len(row.Cells) != 2 || row.Cells[0] != want[i][0] || row.Cells[1] != want[i][1] {
+			t.Fatalf("row %d: %q", i, row.Cells)
+		}
+	}
+	if rows[0].Kind != "th" || len(rows[0].CellSpans[0]) != 1 || !rows[0].CellSpans[0][0].Bold {
+		t.Fatal("lost multiline header emphasis")
+	}
+}
+
+func TestGridFieldsUseDisplayColumns(t *testing.T) {
+	cells := gridFields([]byte("| 猫 | x | é |"), []string{"--------", "---"})
+	if len(cells) != 2 || cells[0] != " 猫 | x " || cells[1] != " é " {
+		t.Fatalf("cells %q", cells)
+	}
+}

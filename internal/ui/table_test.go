@@ -129,3 +129,39 @@ func TestPandocGridResizeAndReveal(t *testing.T) {
 		t.Fatal("revealing source changed Markdown")
 	}
 }
+
+func TestPandocDirectoryGrid(t *testing.T) {
+	src, err := os.ReadFile("../../testdata/directory-grid.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := NewPage()
+	p.SetBlocks(doc.Blocks(src))
+	p.UseBuffer(edit.New(string(src)))
+	for _, width := range []float32{720, 250} {
+		c := drawPage(p, width, 1200)
+		if len(c.StrokeRoundRects) != 1 {
+			t.Fatalf("width %v: got %d tables", width, len(c.StrokeRoundRects))
+		}
+		if len(p.hits) != 2 || p.hits[0].url != "guide.md" || p.hits[1].url != "desk.md" {
+			t.Fatalf("links at %v: %+v", width, p.hits)
+		}
+		alder, birch := glyphY(c, "Alder"), glyphY(c, "Birch")
+		if alder < 0 || p.hits[0].rect.Min.Y <= alder || p.hits[0].rect.Max.Y > birch || p.hits[1].rect.Min.Y < birch || glyphY(c, "Directory") <= birch {
+			t.Fatalf("row placement at %v: %+v", width, glyphs(c))
+		}
+		for _, hit := range p.hits {
+			if hit.rect.Min.X <= glyphBox(c, "Alder").Max.X || hit.rect.Max.X > width {
+				t.Fatalf("link outside its column: %+v", hit)
+			}
+		}
+		for _, g := range glyphs(c) {
+			if strings.ContainsAny(g.text, "|+=") {
+				t.Fatalf("border drawn: %+v", g)
+			}
+		}
+	}
+	if p.Buffer().Text() != string(src) {
+		t.Fatal("formatted view changed the source")
+	}
+}

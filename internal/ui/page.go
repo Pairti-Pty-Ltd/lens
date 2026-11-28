@@ -880,7 +880,7 @@ func (p *Page) layoutTable(rows []doc.Block, width float32) []rendered {
 			lines[c] = p.wrapTableRuns(runs, max(float32(1), cols[c]-2*cellPad))
 		}
 		ln := rendered{cols: cols, cellLines: lines, cellLinks: r.CellLinks, src: r.Line}
-		if i > 0 && rows[0].Line > 0 {
+		if i > 0 && r.Line == 0 && rows[0].Line > 0 {
 			ln.src = rows[0].Line + i + 1
 		}
 		if i == 0 {
@@ -903,7 +903,7 @@ func (p *Page) layoutTable(rows []doc.Block, width float32) []rendered {
 }
 
 func figureRow(rows []doc.Block) (doc.Block, bool) {
-	if len(rows) != 2 || rows[0].Kind != "th" || len(rows[0].Cells) < 2 {
+	if len(rows) != 2 || rows[0].Kind != "th" || rows[1].Line != 0 || len(rows[0].Cells) < 2 {
 		return doc.Block{}, false
 	}
 	for _, c := range rows[0].Cells {
@@ -1046,6 +1046,9 @@ func (p *Page) layoutOne(b doc.Block, width float32, th theme.Theme) []rendered 
 	literal := p.literalParagraph(b)
 	if !literal && p.covers(b.Line, b.Line+b.Lines-1) {
 		return p.layoutRaw(b, width)
+	}
+	if len(b.GridRows) > 0 {
+		return p.layoutTable(b.GridRows, width)
 	}
 	if b.Kind == "grid" {
 		return p.layoutGrid(b, width)

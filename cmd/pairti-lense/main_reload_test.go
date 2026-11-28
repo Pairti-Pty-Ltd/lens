@@ -758,3 +758,25 @@ func TestDocumentTabsLeaveHeadingNavigationToRail(t *testing.T) {
 		t.Fatal("spare tab space has a disclosure icon or accepts clicks")
 	}
 }
+
+func TestPandocDirectoryRawSaveReopen(t *testing.T) {
+	src, err := os.ReadFile("../../testdata/directory-grid.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := testShell()
+	path := openNote(t, s, string(src))
+	s.pick("Formatted")
+	s.pick("Raw")
+	if s.buf.Text() != string(src) {
+		t.Fatal("view switch changed Markdown")
+	}
+	s.buf.InsertText("Updated\n\n")
+	s.pick("Formatted")
+	s.saveDoc()
+	reopened := testShell()
+	reopened.open(ui.Item{Path: path, Rel: filepath.Base(path), ProjectRoot: filepath.Dir(path)})
+	if got := reopened.buf.Text(); got != "Updated\n\n"+string(src) {
+		t.Fatalf("reopened Markdown differs: %q", got)
+	}
+}
